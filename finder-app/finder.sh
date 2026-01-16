@@ -11,11 +11,11 @@
 #!/bin/bash
 
 numArgs=$#
-echo numArgs: ${numArgs}
+# echo numArgs: ${numArgs}
 arg1=$1
 arg2=$2
-echo Arg1: ${arg1}
-echo Arg2: ${arg2}
+# echo Arg1: ${arg1}
+# echo Arg2: ${arg2}
 
 if [ ${numArgs} -eq 2 ]
 then
@@ -29,8 +29,8 @@ if [ ! -d ${arg1} ]
 then
     echo "Expected a directory for arg 1. Exiting."
     exit 1
-else
-    echo Found directory at $1
+# else
+    # echo Found directory at $1
 fi 
 
 # Now we need to recursively search each file and each line for the search str.
@@ -38,16 +38,16 @@ fi
 numFilesFound=0
 numLinesFound=0
 while IFS= read -r -d '' file; do
-    echo $file
+    # echo $file
     if [ -f "$file" ]; then
-        echo processing file
+        # echo processing file
         foundLineInFile=0
         while read -r line; do
-            echo ${line}
+            # echo ${line}
             if [[ "$line" == *"$2"* ]];
             then
                 ((numLinesFound++))
-                if [ foundLineInFile -eq 0 ]
+                if [ $foundLineInFile -eq 0 ]
                 then
                     ((numFilesFound++))
                     foundLineInFile=1
@@ -58,7 +58,7 @@ while IFS= read -r -d '' file; do
         echo Not a file
         continue
     fi
-done
+done < <(find "$1" -type f -print0)
 
 echo Found $numFilesFound with $numLinesFound lines containing $2 in directory $1
 exit 0
