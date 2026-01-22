@@ -4,9 +4,21 @@
 ################################################################################
 
 
+CC := gcc 
+
+ifeq ($(CROSS_COMPILE),)
+TARGET := writer
+else
+TARGET := writer_aarch64
+endif
+
+ifneq ($(CROSS_COMPILE),)
+CC := $(CROSS_COMPILE)gcc
+endif
+
 # Default target
 writer: writer.c
-	gcc writer.c -o writer
+	$(CC) writer.c -o $(TARGET)
 
 clean:
-	rm -f *.o *.out writer
+	rm -f *.o *.out writer writer_aarch64
