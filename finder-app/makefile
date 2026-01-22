@@ -6,7 +6,7 @@
 
 # Default target
 writer: writer.c
-	gcc writer.c -o writer.out
+	gcc writer.c -o writer
 
 clean:
 	rm -f *.o *.out writer
