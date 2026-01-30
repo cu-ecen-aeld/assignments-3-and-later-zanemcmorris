@@ -147,7 +147,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
-    if(outputfile == NULL){
+    if(outputfile == NULL){va_end(args);
         perror("do_exec: First argument was not full path to file to write to");
         return false;
     }
