@@ -147,7 +147,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
-    if(outputfile == NULL || outputfile[0] != '/'){
+    if(outputfile == NULL){
         perror("do_exec: First argument was not full path to file to write to");
         return false;
     }
@@ -190,10 +190,12 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         int rc = waitpid(childPID, &status, 0);
         
         if(rc < 0){
+            va_end(args);
             return false; // rc will be <0 when child exits with an error
         }
 
         if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            va_end(args);
             return true; //If these are good then we successfully did it
         }
 
