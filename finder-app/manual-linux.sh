@@ -16,10 +16,14 @@ ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
 NUM_CORES=$(nproc)
 SYSROOT=$(aarch64-none-linux-gnu-gcc -print-sysroot)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+
 
 echo "Zane printing sysroot"
+echo ${SCRIPT_DIR}
 echo ${SYSROOT}
-# exit
+exit
 
 # SYSROOT=/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu
 # export PATH="/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu/bin/:$PATH"echo "ROOT=${ROOT-<unset>}"
@@ -168,7 +172,8 @@ sudo mknod -m 666 dev/console c 5 1
 echo "made dev/console"
 
 # TODO: Clean and build the writer utility
-cd /home/zane/Documents/AESD/AESD-assignment3/finder-app
+# cd /home/zane/Documents/AESD/AESD-assignment3/finder-app
+cd ${SCRIPT_DIR}
 make clean
 make TARGET=writer CROSS_COMPILE=-aarch64-none-linux-gnu-
 
