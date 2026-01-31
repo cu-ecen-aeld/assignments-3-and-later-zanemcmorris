@@ -17,11 +17,12 @@ CROSS_COMPILE=aarch64-none-linux-gnu-
 SYSROOT=/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu
 export PATH="/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu/bin/:$PATH"
 
-set -eux
-echo "whoami=$(whoami)"
-echo "pwd=$(pwd)"
-echo "ROOT=$ROOT"
-ls -la "$ROOT"
+echo "ROOT=${ROOT-<unset>}"
+echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE-<unset>}"
+echo "SHELL=$SHELL"
+set -o | grep -E 'nounset|errexit|pipefail' || true
+env | sort | grep -E '^(ROOT|GITHUB_WORKSPACE|HOME|USER|SHELL)=' || true
+
 
 
 if [ $# -lt 1 ]
