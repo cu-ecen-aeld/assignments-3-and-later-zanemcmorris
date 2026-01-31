@@ -23,7 +23,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "Zane printing sysroot"
 echo ${SCRIPT_DIR}
 echo ${SYSROOT}
-exit
 
 # SYSROOT=/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu
 # export PATH="/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu/bin/:$PATH"echo "ROOT=${ROOT-<unset>}"
