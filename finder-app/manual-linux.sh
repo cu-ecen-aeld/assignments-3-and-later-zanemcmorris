@@ -7,13 +7,14 @@ set -u
 
 
 
-OUTDIR=/out/aesd
+OUTDIR=/tmp/aeld
 KERNEL_REPO=git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
 KERNEL_VERSION=v5.15.163
 BUSYBOX_VERSION=1_33_1
 FINDER_APP_DIR=$(realpath $(dirname $0))
 ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
+SYSROOT=/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu
 export PATH="/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu/bin/:$PATH"
 
 if [ $# -lt 1 ]
@@ -100,40 +101,93 @@ echo "Done with busybox install"
 echo "Library dependencies"
 pwd
 
+echo "Verifying busybox and /bin/sh"
+ls -l ${OUTDIR}/rootfs/bin/busybox ${OUTDIR}/rootfs/bin/sh
+
+INTERP="$(${CROSS_COMPILE}readelf -l ${OUTDIR}/rootfs/bin/busybox | awk -F': ' '/Requesting program interpreter/ {print $2}')"
+echo "Busybox interpreter is: $INTERP"
+
+
 ${CROSS_COMPILE}readelf -a busybox | grep "program interpreter"
 ${CROSS_COMPILE}readelf -a busybox | grep "Shared library"
 
 # TODO: Add library dependencies to rootfs
+if [ -e "${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libm.so.6" ]; then
+cp ${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libm.so.6 ${OUTDIR}/rootfs/lib64
+echo "Moved libm.so.6" file zane!""
+else
+echo "sucks to be you"
+exit
+fi
+
+if [ -e "${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libresolv.so.2" ]; then
+cp ${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libresolv.so.2 ${OUTDIR}/rootfs/lib64
+echo "Moved libresolv.so.2 zane!"
+else
+echo "sucks to be you"
+exit
+fi
+
+if [ -e "${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libc.so.6" ]; then
+cp ${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libc.so.6 ${OUTDIR}/rootfs/lib64
+echo "Moved libc.so.6 zane!"
+else
+echo "sucks to be you"
+exit
+fi
+# /arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu/aarch64-none-linux-gnu/libc/lib
+if [ -e "${SYSROOT}/aarch64-none-linux-gnu/libc/lib/ld-linux-aarch64.so.1" ]; then
+cp ${SYSROOT}/aarch64-none-linux-gnu/libc/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib
+
+if [ ! -e "${SYSROOT}/aarch64-none-linux-gnu/libc/lib/ld-linux-aarch64.so.1" ]; then
+echo "Lied about moving linker"
+exit
+fi
+
+echo "Moved ld-linux-aarch64.so.1!"
+else
+echo "sucks to be you"
+exit
+fi
 
 # TODO: Make device nodes
 cd ${OUTDIR}/rootfs
 pwd
-mknod -m 666 dev/null c 1 3
+sudo mknod -m 666 dev/null c 1 3
 echo "made dev/null"
-mknod -m 666 dev/console c 5 1
+sudo mknod -m 666 dev/console c 5 1
 echo "made dev/console"
 
 # TODO: Clean and build the writer utility
 cd /home/zane/Documents/AESD/AESD-assignment3/finder-app
 make clean
-make TARGET=writer_aarch64
+make TARGET=writer CROSS_COMPILE=-aarch64-none-linux-gnu-
 
 # TODO: Copy the finder related scripts and executables to the /home directory
 # on the target rootfs
-sudo mv writer_aarch64 ${OUTDIR}/rootfs/home 
-sudo cp finder.sh ${OUTDIR}/rootfs/home
-sudo cp ./conf/assignment.txt ${OUTDIR}/rootfs/home
-sudo cp ./conf/username.txt ${OUTDIR}/rootfs/home
+
+mv writer ${OUTDIR}/rootfs/home 
+cp finder.sh ${OUTDIR}/rootfs/home
+mkdir ${OUTDIR}/rootfs/home/conf/
+cp ./conf/assignment.txt ${OUTDIR}/rootfs/home/conf/
+cp ./conf/username.txt ${OUTDIR}/rootfs/home/conf/
+cp autorun-qemu.sh ${OUTDIR}/rootfs/home
+cp finder-test.sh ${OUTDIR}/rootfs/home
 
 # TODO: Chown the root directory
 cd ${OUTDIR}/rootfs
-sudo chown -R zane .
+sudo chown -R root:root .
 echo "Chowned."
 
 # TODO: Create initramfs.cpio.gz
+cd ${OUTDIR}
+rm -rf initramfs.cpio.gz
+
 cd ${OUTDIR}/rootfs
 pwd
 find . | cpio -H newc -ov --owner root:root > ${OUTDIR}/initramfs.cpio
 cd ${OUTDIR}
-gzip -f initramfs.cpio
+gzip -f "${OUTDIR}/initramfs.cpio"
+
+echo "Done building"
 
