@@ -14,13 +14,12 @@ BUSYBOX_VERSION=1_33_1
 FINDER_APP_DIR=$(realpath $(dirname $0))
 ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
+NUM_CORES=$(nproc)
 
-echo "Zane printing sysroot"
-aarch64-none-linux-gnu-gcc -print-sysroot
-exit
 # SYSROOT=/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu
 # export PATH="/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu/bin/:$PATH"echo "ROOT=${ROOT-<unset>}"
-
+# Docker sysroot V
+# /usr/local/arm-cross-compiler/install/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu/bin/../aarch64-none-linux-gnu/libc
 
 if [ $# -lt 1 ]
 then
@@ -52,7 +51,7 @@ if [  ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
     echo "Done cleaning"
     make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
     echo "Done making defconfig"
-    time make -j8 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} all
+    time make -j"$NUM_CORES" ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} all
     echo "Done making all"
     time make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} modules
     echo "Done making modules"
@@ -117,34 +116,34 @@ ${CROSS_COMPILE}readelf -a busybox | grep "program interpreter"
 ${CROSS_COMPILE}readelf -a busybox | grep "Shared library"
 
 # TODO: Add library dependencies to rootfs
-if [ -e "${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libm.so.6" ]; then
-cp ${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libm.so.6 ${OUTDIR}/rootfs/lib64
+if [ -e "${SYSROOT}/lib64/libm.so.6" ]; then
+cp ${SYSROOT}/lib64/libm.so.6 ${OUTDIR}/rootfs/lib64
 echo "Moved libm.so.6" file zane!""
 else
 echo "sucks to be you"
 exit
 fi
 
-if [ -e "${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libresolv.so.2" ]; then
-cp ${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libresolv.so.2 ${OUTDIR}/rootfs/lib64
+if [ -e "${SYSROOT}/lib64/libresolv.so.2" ]; then
+cp ${SYSROOT}/lib64/libresolv.so.2 ${OUTDIR}/rootfs/lib64
 echo "Moved libresolv.so.2 zane!"
 else
 echo "sucks to be you"
 exit
 fi
 
-if [ -e "${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libc.so.6" ]; then
-cp ${SYSROOT}/aarch64-none-linux-gnu/libc/lib64/libc.so.6 ${OUTDIR}/rootfs/lib64
+if [ -e "${SYSROOT}/lib64/libc.so.6" ]; then
+cp ${SYSROOT}/lib64/libc.so.6 ${OUTDIR}/rootfs/lib64
 echo "Moved libc.so.6 zane!"
 else
 echo "sucks to be you"
 exit
 fi
 # /arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu/aarch64-none-linux-gnu/libc/lib
-if [ -e "${SYSROOT}/aarch64-none-linux-gnu/libc/lib/ld-linux-aarch64.so.1" ]; then
-cp ${SYSROOT}/aarch64-none-linux-gnu/libc/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib
+if [ -e "${SYSROOT}/lib/ld-linux-aarch64.so.1" ]; then
+cp ${SYSROOT}/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib
 
-if [ ! -e "${SYSROOT}/aarch64-none-linux-gnu/libc/lib/ld-linux-aarch64.so.1" ]; then
+if [ ! -e "${SYSROOT}/lib/ld-linux-aarch64.so.1" ]; then
 echo "Lied about moving linker"
 exit
 fi
