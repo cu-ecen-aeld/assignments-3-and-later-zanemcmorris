@@ -15,6 +15,11 @@ FINDER_APP_DIR=$(realpath $(dirname $0))
 ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
 NUM_CORES=$(nproc)
+SYSROOT=$(aarch64-none-linux-gnu-gcc -print-sysroot)
+
+echo "Zane printing sysroot"
+echo ${SYSROOT}
+exit
 
 # SYSROOT=/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu
 # export PATH="/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu/bin/:$PATH"echo "ROOT=${ROOT-<unset>}"
