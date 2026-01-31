@@ -17,6 +17,13 @@ CROSS_COMPILE=aarch64-none-linux-gnu-
 SYSROOT=/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu
 export PATH="/arm-cross-compiler/arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu/bin/:$PATH"
 
+set -eux
+echo "whoami=$(whoami)"
+echo "pwd=$(pwd)"
+echo "ROOT=$ROOT"
+ls -la "$ROOT"
+
+
 if [ $# -lt 1 ]
 then
 	echo "Using default directory ${OUTDIR} for output"
