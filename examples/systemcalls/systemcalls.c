@@ -16,6 +16,24 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
+    int retVal = 0;
+
+    if (cmd == NULL)
+    {
+        perror("do_system: cmd was NULL. Pass a valid command");
+        return false;
+    }
+
+    retVal = system(cmd);
+
+    if(retVal != 0){
+        perror("Failed when calling system()");
+        return false;
+    }
+
+    // printf("retVal: %d\n", retVal);
+
+
 
     return true;
 }
@@ -47,7 +65,6 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
 
 /*
  * TODO:
@@ -59,9 +76,48 @@ bool do_exec(int count, ...)
  *
 */
 
+    // Process commands as they've come in
+    // If arg 0 is full path to program to execute, let's check that
+    if(command[0][0] != '/'){
+        perror("do_exec: First argument was not absolute path to exectuable.");
+        return false;
+    }
+    pid_t parentPID = getpid();
+    pid_t childPID = fork();
+    
+    if(getpid() == parentPID){
+        // printf("Parent PID: %d\n", parentPID);
+        // printf("Child PID: %d\n", childPID);
+    }
+    
+    if(childPID == 0){
+        // This is the child thread
+        // printf("ZANE Child calling execv with args\n");
+        // for(int i = 0; i < count; i++){
+            // printf("%d: %s\n", i, command[i]);
+        // }
+        execv(command[0], command);
+    } else if (getpid() == parentPID){
+        // This is the parent thread
+        int status;
+        // printf("Parent starting to wait on child...\n");
+        
+        int rc = waitpid(childPID, &status, 0);
+        
+        if(rc < 0){
+            return false; // rc will be <0 when child exits with an error
+        }
+
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            return true;
+        }
+    }
+
+
+
     va_end(args);
 
-    return true;
+    return false;
 }
 
 /**
@@ -83,8 +139,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
     command[count] = command[count];
-
-
 /*
  * TODO
  *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
@@ -93,7 +147,64 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
+    if(outputfile == NULL){va_end(args);
+        perror("do_exec: First argument was not full path to file to write to");
+        return false;
+    }
+
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    pid_t parentPID = getpid();
+    pid_t childPID = fork();
+    if(childPID == -1)
+    {
+        perror("Error in trying to create child fork");
+        return false;
+    }
+    
+    if(getpid() == parentPID){
+        // printf("Parent PID: %d\n", parentPID);
+        // printf("Child PID: %d\n", childPID);
+    }
+    
+    if(childPID == 0){
+        // This is the child thread
+        // printf("ZANE Child calling execv with args\n");
+        // for(int i = 0; i < count; i++){
+            // printf("%d: %s\n", i, command[i]);
+        // }
+        if(dup2(fd, STDOUT_FILENO) < 0){
+            perror("dup2 failed");
+            exit(0);
+        }
+
+        close(fd);
+        execv(command[0], command);
+
+        perror("execv");
+        _exit(EXIT_FAILURE);
+    } else if (getpid() == parentPID){
+        // This is the parent thread
+        int status;
+        close(fd);
+                
+        int rc = waitpid(childPID, &status, 0);
+        
+        if(rc < 0){
+            va_end(args);
+            return false; // rc will be <0 when child exits with an error
+        }
+
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            va_end(args);
+            return true; //If these are good then we successfully did it
+        }
+
+        
+    }
+
+    
+
     va_end(args);
 
-    return true;
+    return false;
 }
