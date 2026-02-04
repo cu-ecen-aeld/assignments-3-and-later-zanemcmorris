@@ -25,7 +25,7 @@ struct thread_data{
     bool thread_complete_success;
 };
 
-typedef struct thread_data thread_data_t;
+typedef struct thread_data thread_data_t; // I like typedefs
 
 
 /**
