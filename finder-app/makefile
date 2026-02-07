@@ -20,5 +20,9 @@ endif
 writer: writer.c
 	$(CC) writer.c -o $(TARGET)
 
+.PHONY: all
+all: writer
+
+
 clean:
 	rm -f *.o *.out writer
