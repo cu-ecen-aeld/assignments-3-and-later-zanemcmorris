@@ -9,7 +9,7 @@ CC := gcc
 ifeq ($(CROSS_COMPILE),)
 TARGET := writer
 else
-TARGET := writer_aarch64
+TARGET := writer
 endif
 
 ifneq ($(CROSS_COMPILE),)
@@ -21,4 +21,4 @@ writer: writer.c
 	$(CC) writer.c -o $(TARGET)
 
 clean:
-	rm -f *.o *.out writer writer_aarch64
+	rm -f *.o *.out writer
