@@ -9,7 +9,7 @@ CC := gcc
 ifeq ($(CROSS_COMPILE),)
 TARGET := writer
 else
-TARGET := writer_aarch64
+TARGET := writer
 endif
 
 ifneq ($(CROSS_COMPILE),)
@@ -18,7 +18,12 @@ endif
 
 # Default target
 writer: writer.c
-	$(CC) writer.c -o $(TARGET)
+# 	$(CC) writer.c -o $(TARGET)
+	$(CC) writer.c $(CFLAGS) $(INCLUDES) $(OBJS) -o $(TARGET) $(LDFLAGS)
+
+.PHONY: all
+all: writer
+
 
 clean:
-	rm -f *.o *.out writer writer_aarch64
+	rm -f *.o *.out writer
