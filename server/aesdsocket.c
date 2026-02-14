@@ -142,7 +142,6 @@ int openSocket(const char* port){
     {
         pid_t newpid = fork();
         if(newpid != 0){
-            cleanupProgram();
             exit(0);
         } else {
             // Daemon setup
@@ -230,6 +229,7 @@ int listenLoop()
     do
     {
         int sockaddrsize = sizeof(sockaddr_t);
+        // accept is a blocking call. Execution will wait here for a connection
         clientfd = accept(sockfd, (sockaddr_t*) &clientaddr, &sockaddrsize);
         if(clientfd == -1){
             if(errno == EINTR && endProgram){
@@ -238,11 +238,12 @@ int listenLoop()
                 perror("accept failed");
             }
         }
-
         printClientNameConnected((sockaddr_t *) &clientaddr);
-        memset(buffer, bufferCapacity, 0);
+
+        // Set up to recv from client
         bufferCapacity = RECV_BUFFER_LENGTH_BYTES;
         buffer = (uint8_t*) malloc(bufferCapacity);
+        memset(buffer, bufferCapacity, 0);
         totalBytesRecvd = 0; // Reset num bytes received for this message
 
         // Receive all the bytes now
@@ -273,20 +274,19 @@ int listenLoop()
             }
 
             if(n == 0){
+                // We read all the data out of the socket
                 break;
             }
-
-            
 
             totalBytesRecvd += n;
             printf("Just read %d bytes, making total of %ld\n", n, totalBytesRecvd);
             if(buffer[totalBytesRecvd-1] == '\n'){
                 break;
             }
-
         }
 
         if(!failedToRead){
+            // If we read completely, write message to the log, free the buffer and echo back log
             buffer[totalBytesRecvd] = 0;
             printf("new buffer: %s", buffer);
             write(logfd, buffer, totalBytesRecvd);
@@ -312,8 +312,10 @@ int main(int argc, char ** argv){
     {
         if (strcmp(argv[1], "-d") == 0){
             runAsDaemon = true;
-            // printf("Starting as daemon");
         }
+    } else if(argc != 1){
+        printf("Bad args to aesdsocket\n");
+        return -1;
     }
 
     openlog("aesdsocket", LOG_PERROR, LOG_USER);
@@ -322,10 +324,11 @@ int main(int argc, char ** argv){
     
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
+
     // open a socket on port 9000
-    // listen for and accept a connection
     int rc = openSocket("9000");
     
+    // Listen for and accept new connection
     if(rc == 0)
         listenLoop();
 
