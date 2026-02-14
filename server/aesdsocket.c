@@ -13,7 +13,7 @@
 
 #define MAX_SOCK_CONNECTIONS (1)
 #define LOG_PATH ("/var/tmp/aesdsocketdata")
-#define RECV_BUFFER_LENGTH_BYTES (256)
+#define RECV_BUFFER_LENGTH_BYTES (32)
 
 typedef struct sockaddr sockaddr_t;
 typedef struct addrinfo addrinfo_t;
@@ -125,6 +125,13 @@ int openSocket(const char* port){
         return -1;
     }
 
+    int val = 1;
+    rc = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
+    if(rc == -1){
+        perror("Failed setsockopt");
+        return -1;
+    }
+
     rc = bind(sockfd, addrinfo->ai_addr, addrinfo->ai_addrlen);
     if(rc == -1){
         perror("bind failed");
@@ -147,9 +154,13 @@ int openSocket(const char* port){
             if(newpid < 0) return -1;
             if(newpid > 0) exit(0);
 
-            close(0);
-            close(1);
-            close(2);
+            int nullfd = open("/dev/null", O_RDWR);
+            if (nullfd < 0) return -1;
+
+            // Force stdin/stdout/stderr to /dev/null
+            if (dup2(nullfd, STDIN_FILENO)  < 0) return -1;
+            if (dup2(nullfd, STDOUT_FILENO) < 0) return -1;
+            if (dup2(nullfd, STDERR_FILENO) < 0) return -1;
 
             return 0;
         }
@@ -197,7 +208,6 @@ int listenLoop()
     int rc = 0;
     struct sockaddr_storage clientaddr;
     int newfd = 0;
-    uint8_t buf[RECV_BUFFER_LENGTH_BYTES] = {0};
     logfd = open(LOG_PATH, (O_APPEND | O_CREAT | O_RDWR), 0777);
     if(logfd < 0){
         perror("Could not open logfd");
@@ -210,6 +220,12 @@ int listenLoop()
     if(rc == -1){
         perror("listen failed");
     }
+
+    uint32_t bufferCapacity = RECV_BUFFER_LENGTH_BYTES;
+    uint8_t *buffer = NULL;
+    uint8_t *tmp;
+    size_t totalBytesRecvd = 0;
+    bool failedToRead = false;
 
     do
     {
@@ -224,19 +240,68 @@ int listenLoop()
         }
 
         printClientNameConnected((sockaddr_t *) &clientaddr);
+        memset(buffer, bufferCapacity, 0);
+        bufferCapacity = RECV_BUFFER_LENGTH_BYTES;
+        buffer = (uint8_t*) malloc(bufferCapacity);
+        totalBytesRecvd = 0; // Reset num bytes received for this message
 
-        size_t bytesWritten = recv(clientfd, buf, RECV_BUFFER_LENGTH_BYTES, 0);
-        buf[bytesWritten] = 0;
-        printf("new buffer: %s", buf);
-        write(logfd, buf, bytesWritten);
+        // Receive all the bytes now
+        while(1)
+        {
+            if(totalBytesRecvd == bufferCapacity){
+                bufferCapacity *= 2;
+                uint8_t *temp = realloc(buffer, bufferCapacity);
+                if(temp == NULL){
+                    free(buffer);
+                    // toss this message and go next...
+                    failedToRead = true;
+                    printf("Failed to malloc large enough buffer.\n");
+                    break;
+                }
 
-        sendFullLog(clientfd);
+                buffer = temp;
+                printf("Doubled buffer size. Now %d bytes\n", bufferCapacity);
+            }
+
+            int n = recv(clientfd, buffer + totalBytesRecvd, bufferCapacity - totalBytesRecvd, 0);
+            if(n < 0){
+                // Error on recv
+                free(buffer);
+                buffer = NULL;
+                perror("recv");
+                return -1;
+            }
+
+            if(n == 0){
+                break;
+            }
+
+            
+
+            totalBytesRecvd += n;
+            printf("Just read %d bytes, making total of %ld\n", n, totalBytesRecvd);
+            if(buffer[totalBytesRecvd-1] == '\n'){
+                break;
+            }
+
+        }
+
+        if(!failedToRead){
+            buffer[totalBytesRecvd] = 0;
+            printf("new buffer: %s", buffer);
+            write(logfd, buffer, totalBytesRecvd);
+            if(buffer != NULL)
+            {
+                free(buffer);
+                buffer = NULL;
+            }   
+            sendFullLog(clientfd);
+        }
 
         printClientNameDisconnected((sockaddr_t *) &clientaddr);
         shutdown(clientfd, SHUT_RDWR);
         close(clientfd);
         clientfd = -1;
-
 
     }while(!endProgram);    
 }
@@ -264,8 +329,6 @@ int main(int argc, char ** argv){
     if(rc == 0)
         listenLoop();
 
-
-
     cleanupProgram();
-    return 0;
+    return rc;
 }

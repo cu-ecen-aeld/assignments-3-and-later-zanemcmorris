@@ -29,4 +29,4 @@ all: aesdserver
 
 
 clean:
-	rm -f *.o *.out aesdserver
+	rm -f *.o *.out aesdsocket
