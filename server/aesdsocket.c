@@ -254,17 +254,17 @@ int openSocket(const char* port){
                 return -1;
             }
 
-            newpid = fork();
-            if(newpid < 0) return -1;
-            if(newpid > 0) exit(0);
+            // newpid = fork();
+            // if(newpid < 0) return -1;
+            // if(newpid > 0) exit(0);
 
             int nullfd = open("/dev/null", O_RDWR);
             if (nullfd < 0) return -1;
 
             // Force stdin/stdout/stderr to /dev/null
-            // if (dup2(nullfd, STDIN_FILENO)  < 0) return -1;
-            // if (dup2(nullfd, STDOUT_FILENO) < 0) return -1;
-            // if (dup2(nullfd, STDERR_FILENO) < 0) return -1;
+            if (dup2(nullfd, STDIN_FILENO)  < 0) return -1;
+            if (dup2(nullfd, STDOUT_FILENO) < 0) return -1;
+            if (dup2(nullfd, STDERR_FILENO) < 0) return -1;
 
         }
     }
