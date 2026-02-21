@@ -340,6 +340,8 @@ void* repsondingThread(void* arg)
     slist_data_t *myNodeData = (slist_data_t*) (arg);
     int clientFD = myNodeData->clientfd;
 
+    syslog(LOG_DEBUG, "New thread reporting for duty!");
+
     // Set up to recv from client
     size_t bufferCapacity = RECV_BUFFER_LENGTH_BYTES;
     uint8_t *buffer = (uint8_t*) malloc(bufferCapacity);
@@ -372,6 +374,7 @@ void* repsondingThread(void* arg)
             // Error on recv
             free(buffer);
             buffer = NULL;
+            syslog(LOG_DEBUG, "recv failed");
             perror("recv failed");
             return NULL;
         }
@@ -395,6 +398,7 @@ void* repsondingThread(void* arg)
         // If we read completely, write message to the log, free the buffer and echo back log
         buffer[totalBytesRecvd] = 0;
         // printf("new buffer: %s", buffer);
+        syslog(LOG_DEBUG, "Recvd string: %s", buffer);
 
         pthread_mutex_lock(&logMutex);
         write(logfd, buffer, totalBytesRecvd); // Protext the log write
@@ -415,6 +419,7 @@ void* repsondingThread(void* arg)
     close(clientFD);
     clientFD = -1;
     atomic_store(&myNodeData->isThreadComplete, true);
+    syslog(LOG_DEBUG, "Thread cleaned up");
 
     return NULL;
 
@@ -449,6 +454,7 @@ int listenLoop()
     {
         // accept is a blocking call. Execution will wait here for a connection
         // printf("Main thread accepting new connections...\n");
+        syslog(LOG_DEBUG, "Main loop ready to accept new connection");
         int clientfd = accept(sockfd, (sockaddr_t*) &clientaddr, &clientAddrSize);
         if(clientfd == -1){
             if(errno == EINTR && endProgram){
@@ -458,6 +464,7 @@ int listenLoop()
             }
         }
         printClientNameConnected((sockaddr_t *) &clientaddr, clientAddrSize);
+        syslog(LOG_DEBUG, "New client - making new thread");
 
         // Create new LinkedList node for the new pthread and give it the clientfd to act on
         slist_data_t *newNode = NULL;
@@ -485,6 +492,8 @@ int listenLoop()
         }
 
     }while(!endProgram);
+
+    syslog(LOG_DEBUG, "Endprogram caught - cleaning up LL");
 
     // Program is ending. Clean up whole LL
     slist_data_t* dataptr = NULL, *tmp = NULL;
@@ -535,5 +544,7 @@ int main(int argc, char ** argv){
         rc = listenLoop();
 
     cleanupProgram();
+
+    syslog(LOG_DEBUG, "socketserver closing");
     return rc;
 }
