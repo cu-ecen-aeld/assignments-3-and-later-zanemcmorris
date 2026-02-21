@@ -124,7 +124,7 @@ int startIntervalLoggingTimer()
         return -1;
     }
 
-    printf("itimer should be set up\n");
+    // printf("itimer should be set up\n");
 
     return 0;
 }
@@ -363,7 +363,7 @@ void* repsondingThread(void* arg)
             }
 
             buffer = temp;
-            printf("Doubled buffer size. Now %ld bytes\n", bufferCapacity);
+            // printf("Doubled buffer size. Now %ld bytes\n", bufferCapacity);
         }
 
         // Recieve n bytes from the client
@@ -382,7 +382,7 @@ void* repsondingThread(void* arg)
         }
 
         totalBytesRecvd += n;
-        printf("Just read %d bytes, making total of %d\n", n, totalBytesRecvd);
+        // printf("Just read %d bytes, making total of %d\n", n, totalBytesRecvd);
 
         // Only stop loop if the final char is a newline
         if(buffer[totalBytesRecvd-1] == '\n'){
@@ -394,7 +394,7 @@ void* repsondingThread(void* arg)
     if(!failedToRead){
         // If we read completely, write message to the log, free the buffer and echo back log
         buffer[totalBytesRecvd] = 0;
-        printf("new buffer: %s", buffer);
+        // printf("new buffer: %s", buffer);
 
         pthread_mutex_lock(&logMutex);
         write(logfd, buffer, totalBytesRecvd); // Protext the log write
@@ -415,7 +415,6 @@ void* repsondingThread(void* arg)
     close(clientFD);
     clientFD = -1;
     atomic_store(&myNodeData->isThreadComplete, true);
-    printf("Thread cleaned up!\n");
 
     return NULL;
 
@@ -449,7 +448,7 @@ int listenLoop()
     do
     {
         // accept is a blocking call. Execution will wait here for a connection
-        printf("Main thread accepting new connections...\n");
+        // printf("Main thread accepting new connections...\n");
         int clientfd = accept(sockfd, (sockaddr_t*) &clientaddr, &clientAddrSize);
         if(clientfd == -1){
             if(errno == EINTR && endProgram){
