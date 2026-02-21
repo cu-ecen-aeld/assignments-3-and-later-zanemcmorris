@@ -542,7 +542,7 @@ int main(int argc, char ** argv){
     }    
 
     // Listen for and accept new connection
-    if(rc == 0)
+    // if(rc == 0)
         rc = listenLoop();
 
     cleanupProgram();
