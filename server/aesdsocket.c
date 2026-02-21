@@ -68,8 +68,10 @@ void handle_sigint(int sig) {
 /**
  * @brief POSIX Interval timer callback thread. Logs timestamps to LOG_PATH
  */
-static void timerCallback()
+static void timerCallback(union sigval sv)
 {
+
+    (void) sv;
     // TODO: Print something to log
     char str[64] = {0};
     time_t rawTime;
@@ -396,7 +398,7 @@ void* repsondingThread(void* arg)
     // Trap for failed to read to hit the cleanup and return step at the end of function
     if(!failedToRead){
         // If we read completely, write message to the log, free the buffer and echo back log
-        buffer[totalBytesRecvd] = 0;
+        // buffer[totalBytesRecvd] = 0;
         // printf("new buffer: %s", buffer);
         syslog(LOG_DEBUG, "Recvd string: %s", buffer);
 
@@ -440,6 +442,8 @@ int listenLoop()
         perror("Could not open logfd");
         return -1;
     }
+
+    startIntervalLoggingTimer(); // Start once logFD is open
 
     printf("starting to listen...\n");
     rc = listen(sockfd, MAX_SOCK_CONNECTIONS);
@@ -537,7 +541,6 @@ int main(int argc, char ** argv){
     }
 
     
-    startIntervalLoggingTimer();
 
     // Listen for and accept new connection
     if(rc == 0)
