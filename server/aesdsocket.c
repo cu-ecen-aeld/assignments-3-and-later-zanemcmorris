@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include <stdatomic.h>
+#include <time.h>
 
 #define MAX_SOCK_CONNECTIONS (100)
 #define LOG_PATH ("/var/tmp/aesdsocketdata")
@@ -70,7 +71,29 @@ void handle_sigint(int sig) {
 static void timerCallback()
 {
     // TODO: Print something to log
+    char str[64] = {0};
+    time_t rawTime;
+    struct tm timeStruct = {0};
 
+    time(&rawTime);
+    localtime_r(&rawTime, &timeStruct);
+
+    snprintf(str, sizeof(str), "timestamp:");
+    
+    int charsWritten = strftime(str+10, sizeof(str) - 10, "%a, %d %b %Y %T %z", &timeStruct);
+    if(charsWritten > sizeof(str)){
+        printf("Zane made bad size of arr!\n");
+        return;
+    }
+
+    charsWritten += 10; // Increment by the "timestamp:" chars
+    
+    str[charsWritten] = '\n';
+    charsWritten += 1; // Make room for newline
+
+    pthread_mutex_lock(&logMutex);
+    write(logfd, str, charsWritten);
+    pthread_mutex_unlock(&logMutex);
 
     return;
 }
