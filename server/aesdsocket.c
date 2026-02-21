@@ -291,7 +291,7 @@ int sendFullLog(int newfd)
     }
 
     int fsize = st.st_size;
-    printf("fsize: %d\n", fsize);
+    // printf("fsize: %d\n", fsize);
 
     char *buf = malloc(sizeof(char) * fsize);
     if(buf == NULL)
