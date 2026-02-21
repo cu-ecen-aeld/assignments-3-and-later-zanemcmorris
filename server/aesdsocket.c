@@ -266,9 +266,10 @@ int openSocket(const char* port){
             if (dup2(nullfd, STDOUT_FILENO) < 0) return -1;
             if (dup2(nullfd, STDERR_FILENO) < 0) return -1;
 
-            return 0;
         }
     }
+
+    return 0;
 
 }
 
@@ -398,7 +399,7 @@ void* repsondingThread(void* arg)
     // Trap for failed to read to hit the cleanup and return step at the end of function
     if(!failedToRead){
         // If we read completely, write message to the log, free the buffer and echo back log
-        // buffer[totalBytesRecvd] = 0;
+        // buffer[totalBytesRecvd] = 0; // Set null-terminator
         // printf("new buffer: %s", buffer);
         syslog(LOG_DEBUG, "Recvd string: %s", buffer);
 
