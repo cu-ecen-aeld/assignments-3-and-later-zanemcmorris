@@ -262,9 +262,9 @@ int openSocket(const char* port){
             if (nullfd < 0) return -1;
 
             // Force stdin/stdout/stderr to /dev/null
-            if (dup2(nullfd, STDIN_FILENO)  < 0) return -1;
-            if (dup2(nullfd, STDOUT_FILENO) < 0) return -1;
-            if (dup2(nullfd, STDERR_FILENO) < 0) return -1;
+            // if (dup2(nullfd, STDIN_FILENO)  < 0) return -1;
+            // if (dup2(nullfd, STDOUT_FILENO) < 0) return -1;
+            // if (dup2(nullfd, STDERR_FILENO) < 0) return -1;
 
         }
     }
