@@ -247,6 +247,7 @@ int openSocket(const char* port){
     {
         pid_t newpid = fork();
         if(newpid != 0){
+            sleep(1);
             exit(0);
         } else {
             // Daemon setup
