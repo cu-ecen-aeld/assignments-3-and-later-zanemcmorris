@@ -4,17 +4,10 @@
 ################################################################################
 
 
-CC := gcc 
-
-ifeq ($(CROSS_COMPILE),)
-TARGET := aesdsocket
-else
-TARGET := aesdsocket
-endif
-
-ifneq ($(CROSS_COMPILE),)
-CC := $(CROSS_COMPILE)gcc
-endif
+CC ?= ${CROSS_COMPILE}gcc
+CFLAGS ?= -g -Wall -Werror
+TARGET ?= aesdsocket
+LDFLAGS ?= -lpthread -lrt
 
 # Default target
 aesdserver: aesdsocket.c
