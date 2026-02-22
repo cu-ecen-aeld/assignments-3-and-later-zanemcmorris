@@ -247,7 +247,7 @@ int openSocket(const char* port){
     {
         pid_t newpid = fork();
         if(newpid != 0){
-            sleep(1);
+            sleep(1); // Wait a moment for the daemon to init, then exit
             exit(0);
         } else {
             // Daemon setup
@@ -255,17 +255,13 @@ int openSocket(const char* port){
                 return -1;
             }
 
-            // newpid = fork();
-            // if(newpid < 0) return -1;
-            // if(newpid > 0) exit(0);
-
             int nullfd = open("/dev/null", O_RDWR);
             if (nullfd < 0) return -1;
 
             // Force stdin/stdout/stderr to /dev/null
-            // if (dup2(nullfd, STDIN_FILENO)  < 0) return -1;
-            // if (dup2(nullfd, STDOUT_FILENO) < 0) return -1;
-            // if (dup2(nullfd, STDERR_FILENO) < 0) return -1;
+            if (dup2(nullfd, STDIN_FILENO)  < 0) return -1;
+            if (dup2(nullfd, STDOUT_FILENO) < 0) return -1;
+            if (dup2(nullfd, STDERR_FILENO) < 0) return -1;
 
         }
     }
@@ -543,7 +539,7 @@ int main(int argc, char ** argv){
     }    
 
     // Listen for and accept new connection
-    // if(rc == 0)
+    if(rc == 0)
         rc = listenLoop();
 
     cleanupProgram();
