@@ -35,7 +35,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     */
 
     if(buffer == NULL || entry_offset_byte_rtn == NULL){
-        printf("Null addresses passed into find_entry_offet_for_fpos. Returning\n");
+        // printf("Null addresses passed into find_entry_offet_for_fpos. Returning\n");
         return NULL;
     }
 
@@ -47,10 +47,10 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     while(entriesProcessed < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED){
         prevNumCharsInBuffer = numCharsInBuffer;
         numCharsInBuffer += buffer->entry[entryIndex].size;
-        printf("After considering entry %d, total chars is %d\n", entryIndex, numCharsInBuffer);
+        // printf("After considering entry %d, total chars is %d\n", entryIndex, numCharsInBuffer);
         if(numCharsInBuffer > char_offset){
             // Buffer now contains the char offset, and entryIndex holds the entry that just got us there.
-            printf("Char offset should be in entry indexed %d\n", entryIndex);
+            // printf("Char offset should be in entry indexed %d\n", entryIndex);
             break;
         }
 
@@ -63,7 +63,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 
     if(numCharsInBuffer - 1 < char_offset){
         // If this is hit then the char offset does not map to an entry. 
-        printf("Char offset not found in buffer. Returning\n");
+        // printf("Char offset not found in buffer. Returning\n");
         return NULL;
     }
 
@@ -80,22 +80,23 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 * Any necessary locking must be handled by the caller
 * Any memory referenced in @param add_entry must be allocated by and/or must have a lifetime managed by the caller.
 */
-void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
+const char *aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
     /**
     * TODO: implement per description
     */
     static int hasBufferBeenFilled = 0;
+    char* retVal = NULL;
 
     if(buffer == NULL || add_entry == NULL){
-        printf("Null addresses passed into add_entry. Returning\n");
-        return;
+        // printf("Null addresses passed into add_entry. Returning\n");
+        return NULL;
     }
 
-
     // Insert buffer entry
+    retVal = buffer->entry[buffer->in_offs].buffptr;
     buffer->entry[buffer->in_offs] = *add_entry;
-    printf("Wrote entry to index %d w/ str: %s\n", buffer->in_offs, add_entry->buffptr);
+    // printf("Wrote entry to index %d w/ str: %s\n", buffer->in_offs, add_entry->buffptr);
 
     // Check if we wrote to end of list
     if(hasBufferBeenFilled && buffer->out_offs == buffer->in_offs){
@@ -114,7 +115,8 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
         hasBufferBeenFilled = 1;
     }
 
-    printf("After inserting, in_offs=%d | out_offs=%d\n", buffer->in_offs, buffer->out_offs);
+    // printf("After inserting, in_offs=%d | out_offs=%d\n", buffer->in_offs, buffer->out_offs);
+    return retVal;
 
 }
 
