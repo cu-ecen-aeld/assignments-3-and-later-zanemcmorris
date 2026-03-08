@@ -54,6 +54,11 @@ int aesd_release(struct inode *inode, struct file *filp)
     /**
      * TODO: handle release
      */
+    struct aesd_dev *dev;
+    dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
+
+   
+    
     return 0;
 }
 
@@ -65,7 +70,44 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     /**
      * TODO: handle read
      */
+    struct aesd_dev *dev;
+    dev = filp->private_data;
 
+    mutex_lock(&dev->deviceMutex);
+    size_t entryOffset = 0;
+    struct aesd_buffer_entry* entry = NULL;
+    entry = aesd_circular_buffer_find_entry_offset_for_fpos(dev->circBufferPtr, *f_pos, &entryOffset);
+    if(entry == NULL){
+        // something bad or could not find offset within entries.
+        PDEBUG("buffer returned null on read. Check is offset is valid");
+        retval = 0;
+        goto exit_aesd_read;
+    }
+
+    size_t bytesToCopy = 0;
+    size_t bytesLeftInEntry = entry->size - entryOffset;
+    if(bytesLeftInEntry < count){
+        bytesToCopy = bytesLeftInEntry; // We can copy the whole entry out but they wanted more
+
+    } else {
+        bytesToCopy = count; // Entry is longer than buffer we're allowed to write to
+    }
+
+
+    size_t rc = copy_to_user(buf, entry->buffptr + entryOffset, bytesToCopy);
+    if(rc != 0){
+        // Did not copy all bytes -- abort....
+        PDEBUG("Failed to copy all bytes to user.");
+        retval = -EFAULT;
+        goto exit_aesd_read;
+    }
+
+    *f_pos += bytesToCopy;         
+    retval = bytesToCopy;
+
+
+exit_aesd_read:
+    mutex_unlock(&dev->deviceMutex);
     return retval;
 }
 
@@ -153,16 +195,18 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             mutex_unlock(&aesd_device.deviceMutex);
             return -ENOMEM;
         }
+        memset(newCircEntry.buffptr, 0, newCircEntry.size);
 
         memcpy(newCircEntry.buffptr, aesd_device.tempBuffer, newCircEntry.size);
-        const char *oldEntry = aesd_circular_buffer_add_entry(aesd_device.circBufferPtr, &newCircEntry);
-        if (oldEntry != NULL)
+        const char *oldEntryBufPtr = aesd_circular_buffer_add_entry(aesd_device.circBufferPtr, &newCircEntry);
+        if (oldEntryBufPtr != NULL)
         {
             // There was an old entry that was removed as a result of adding the new entry.
-            PDEBUG("Freeing old entry @ %p", oldEntry);
-            kfree(oldEntry);
+            PDEBUG("Freeing old entry @ %p w/ string %s", oldEntryBufPtr, oldEntryBufPtr);
+            kfree(oldEntryBufPtr);
         }
         aesd_device.onGoingWrite = 0; // Write just finished. Cleanup state and return
+        PDEBUG("Write complete! Wrote %s", newCircEntry.buffptr);
         kfree(aesd_device.tempBuffer);
         aesd_device.tempBuffer = NULL;
         aesd_device.tempBufferIndex = 0;

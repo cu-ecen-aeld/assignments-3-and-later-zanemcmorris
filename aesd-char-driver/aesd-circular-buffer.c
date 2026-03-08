@@ -34,7 +34,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     * TODO: implement per description
     */
 
-    if(buffer == NULL || entry_offset_byte_rtn == NULL){
+    if(buffer == NULL){
         // printf("Null addresses passed into find_entry_offet_for_fpos. Returning\n");
         return NULL;
     }
@@ -68,7 +68,8 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     }
 
     // We have total chars and the index of the start of the string of interest
-    *entry_offset_byte_rtn = char_offset - prevNumCharsInBuffer; 
+    if(entry_offset_byte_rtn != NULL)
+        *entry_offset_byte_rtn = char_offset - prevNumCharsInBuffer; 
 
     return &buffer->entry[entryIndex];
 }
