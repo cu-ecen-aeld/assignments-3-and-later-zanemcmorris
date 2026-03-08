@@ -18,11 +18,20 @@
 #include <stdatomic.h>
 #include <time.h>
 
-#define MAX_SOCK_CONNECTIONS (100)
+#define USE_AESD_CHAR_DEVICE (1)
+
+#if (USE_AESD_CHAR_DEVICE == 1)
+#define LOG_PATH ("/dev/aesdchar")
+#else
 #define LOG_PATH ("/var/tmp/aesdsocketdata")
+#endif
+
+
+#define MAX_SOCK_CONNECTIONS (100)
 #define SOCKET_PORT ("9000")
 #define RECV_BUFFER_LENGTH_BYTES (32)
 #define ITIMER_PERIOD_SEC (10)
+
 
 typedef struct sockaddr sockaddr_t;
 typedef struct addrinfo addrinfo_t;
@@ -150,7 +159,7 @@ int cleanupProgram()
         close(logfd);
         logfd = -1;
     }
-
+#if (USE_AESD_CHAR_DEVICE == 0)
     int rc;
     rc = access(LOG_PATH, F_OK);
     if(rc == 0){
@@ -159,8 +168,9 @@ int cleanupProgram()
             perror("remove failed");
         }
     }
-
+#endif
     printf("Cleaned!\n");
+    return 0;
 }
 
 /**
@@ -434,14 +444,15 @@ int listenLoop()
 {
     int rc = 0;
     struct sockaddr_storage clientaddr;
-    int newfd = 0;
-    logfd = open(LOG_PATH, (O_APPEND | O_CREAT | O_RDWR), 0777);
+    logfd = open(LOG_PATH, (O_APPEND | O_CREAT | O_RDWR), 0666);
     if(logfd < 0){
         perror("Could not open logfd");
         return -1;
     }
 
+    #if (USE_AESD_CHAR_DEVICE == 0)
     startIntervalLoggingTimer(); // Start once logFD is open
+    #endif
 
     printf("starting to listen...\n");
     rc = listen(sockfd, MAX_SOCK_CONNECTIONS);
@@ -449,7 +460,7 @@ int listenLoop()
         perror("listen failed");
     }
 
-    int clientAddrSize = sizeof(clientaddr);
+    uint32_t clientAddrSize = sizeof(clientaddr);
     SLIST_INIT(&head); // Create LL for threadss
 
     do
@@ -505,6 +516,8 @@ int listenLoop()
         free(dataptr);
     }
 
+    return 0;
+
 }
 
 /**
@@ -521,6 +534,12 @@ int main(int argc, char ** argv){
         printf("Bad args to aesdsocket\n");
         return -1;
     }
+
+    #if USE_AESD_CHAR_DEVICE
+    printf("Using char device for ased socket!\n");
+    #else
+    printf("Using regular log for aesd socket!\n");
+    #endif
 
     openlog("aesdsocket", LOG_PERROR, LOG_USER);
     struct sigaction sa = {0};
