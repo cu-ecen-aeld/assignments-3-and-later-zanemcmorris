@@ -15,7 +15,7 @@ if [ -e ${module}.ko ]; then
     echo "Loading local built file ${module}.ko"
     insmod ./$module.ko $* || exit 1
 
-elif [-e /lib/modules/${module}.ko ]; then
+elif [ -e /lib/modules/${module}.ko ]; then
     echo "loading ${module} from /lib/modules"
     insmod /lib/modules/${module}.ko $* || exit 1
 else
