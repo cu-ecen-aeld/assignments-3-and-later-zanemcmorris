@@ -22,8 +22,10 @@
 
 #if (USE_AESD_CHAR_DEVICE == 1)
 #define LOG_PATH ("/dev/aesdchar")
+#define LOG_OPTIONS (O_WRONLY | O_RDONLY)
 #else
 #define LOG_PATH ("/var/tmp/aesdsocketdata")
+#define LOG_OPTIONS (O_APPEND | O_CREAT | O_RDWR)
 #endif
 
 
@@ -39,7 +41,7 @@ typedef struct addrinfo addrinfo_t;
 // Globally available addrinfo to clean after program terminates
 addrinfo_t *addrinfo = NULL;
 int sockfd = -1;
-int logfd = -1;
+// int logfd = -1;
 // int clientfd = -1;
 volatile int endProgram = 0;
 bool runAsDaemon = false;
@@ -102,9 +104,17 @@ static void timerCallback(union sigval sv)
     str[charsWritten] = '\n';
     charsWritten += 1; // Make room for newline
 
+    int logfd = open(LOG_PATH, LOG_OPTIONS, 0666);
+    if(logfd < 0){
+        perror("Could not open logfd");
+        return;
+    }
+
     pthread_mutex_lock(&logMutex);
     write(logfd, str, charsWritten);
     pthread_mutex_unlock(&logMutex);
+
+    close(logfd);
 
     return;
 }
@@ -155,10 +165,10 @@ int cleanupProgram()
         sockfd = -1;
     }
 
-    if(logfd != -1){
-        close(logfd);
-        logfd = -1;
-    }
+    // if(logfd != -1){
+    //     close(logfd);
+    //     logfd = -1;
+    // }
 #if (USE_AESD_CHAR_DEVICE == 0)
     int rc;
     rc = access(LOG_PATH, F_OK);
@@ -410,9 +420,17 @@ void* repsondingThread(void* arg)
         // printf("new buffer: %s", buffer);
         syslog(LOG_DEBUG, "Recvd string: %s", buffer);
 
+        int logfd = open(LOG_PATH, LOG_OPTIONS, 0666);
+        if(logfd < 0){
+            perror("Could not open logfd");
+            return NULL;
+        }
+
         pthread_mutex_lock(&logMutex);
         write(logfd, buffer, totalBytesRecvd); // Protext the log write
         pthread_mutex_unlock(&logMutex);
+
+        close(logfd);
 
         if(buffer != NULL)
         {
@@ -444,11 +462,7 @@ int listenLoop()
 {
     int rc = 0;
     struct sockaddr_storage clientaddr;
-    logfd = open(LOG_PATH, (O_APPEND | O_CREAT | O_RDWR), 0666);
-    if(logfd < 0){
-        perror("Could not open logfd");
-        return -1;
-    }
+    
 
     #if (USE_AESD_CHAR_DEVICE == 0)
     startIntervalLoggingTimer(); // Start once logFD is open
