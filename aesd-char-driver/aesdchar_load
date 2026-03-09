@@ -17,7 +17,7 @@ if [ -e ${module}.ko ]; then
 
 elif [ -e /lib/modules/${module}.ko ]; then
     echo "loading ${module} from /lib/modules"
-    modprobe /lib/modules/${module}.ko $* || exit 1
+    insmod /lib/modules/${module}.ko $* || exit 1
 else
     echo "Local file ${module}.ko not found, attempting to modprobe"
     modprobe ${module} || exit 1
