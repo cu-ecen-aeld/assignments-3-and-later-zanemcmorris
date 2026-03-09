@@ -303,49 +303,28 @@ int sendFullLog(int newfd)
         return -1;
     }
 
-    struct stat st;
-    int rc = stat(LOG_PATH, &st);
-    if(rc == -1){
-        perror("Stat failed");
-        return -1;
-    }
-
-    int fsize = st.st_size;
-    // printf("fsize: %d\n", fsize);
-
-    char *buf = malloc(sizeof(char) * fsize);
-    if(buf == NULL)
-    {
-        // Malloc failed
-        syslog(LOG_DEBUG, "Malloc failed in sendFullLog");
-        return -1;
-    }
-
+    char buf[64];
     while (1) {
-        ssize_t n = read(fd, buf, fsize);
+        ssize_t n = read(fd, buf, sizeof(buf));
         if (n == 0) break;
         if (n < 0) {
             perror("read log");
-            close(newfd);
-            free(buf);
+            close(fd);
             return -1;
         }
 
-        // send() may write fewer bytes than requested, so loop until done
         ssize_t sent = 0;
         while (sent < n) {
             ssize_t m = send(newfd, buf + sent, (size_t)(n - sent), 0);
             if (m < 0) {
                 perror("send");
-                close(newfd);
-                free(buf);
+                close(fd);
                 return -1;
             }
             sent += m;
         }
     }
 
-    free(buf);
     close(fd);
     return 0;
 }
