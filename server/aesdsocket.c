@@ -17,6 +17,7 @@
 #include <sys/time.h>
 #include <stdatomic.h>
 #include <time.h>
+#include "../aesd-char-driver/aesd_ioctl.h"
 
 #define USE_AESD_CHAR_DEVICE (1)
 
@@ -343,7 +344,7 @@ void* repsondingThread(void* arg)
 
     // Set up to recv from client
     size_t bufferCapacity = RECV_BUFFER_LENGTH_BYTES;
-    uint8_t *buffer = (uint8_t*) malloc(bufferCapacity);
+    char *buffer = (char*) malloc(bufferCapacity);
     memset(buffer, 0, bufferCapacity);
     int totalBytesRecvd = 0; // Reset num bytes received for this message
     bool failedToRead = false;
@@ -354,7 +355,7 @@ void* repsondingThread(void* arg)
         // If received bytes on last ittr was at buffer capacity, then double capacity and keep going
         if(totalBytesRecvd == bufferCapacity){
             bufferCapacity *= 2;
-            uint8_t *temp = realloc(buffer, bufferCapacity);
+            char *temp = realloc(buffer, bufferCapacity);
             if(temp == NULL){
                 free(buffer);
                 // toss this message and go next if malloc failed 
@@ -393,11 +394,41 @@ void* repsondingThread(void* arg)
     }
 
     // Trap for failed to read to hit the cleanup and return step at the end of function
-    if(!failedToRead){
+    while(!failedToRead){
         // If we read completely, write message to the log, free the buffer and echo back log
         // buffer[totalBytesRecvd] = 0; // Set null-terminator
         // printf("new buffer: %s", buffer);
         syslog(LOG_DEBUG, "Recvd string: %s", buffer);
+
+        // Check for ioctl command
+        // If the input string was shorter than the command length then it certainly cannot be a ioctl
+        // printf("buffer size: %ld", bufferCapacity);
+        if(bufferCapacity > sizeof("AESDCHAR_IOCSEEKTO:")){
+            if(strncmp(buffer, "AESDCHAR_IOCSEEKTO:", sizeof("AESDCHAR_IOCSEEKTO:") - 1) == 0){
+            // we received a ioctl command!
+            // format:X,Y 
+                long ioctlData = 0;
+                long cmdIndex = 0, cmdOffset = 0;
+                if(sscanf(buffer, "AESDCHAR_IOCSEEKTO:%ld,%ld", &cmdIndex, &cmdOffset) == 2){
+                    // printf("x=%ld y=%ld\n", cmdIndex, cmdOffset);
+                    ioctlData = (cmdIndex << 32) | (cmdOffset);
+                    // printf("iocl: %ld\n", ioctlData);
+
+                    #if USE_AESD_CHAR_DEVICE
+                    int charDevFD = open(LOG_PATH, O_RDWR);
+                    ioctl(charDevFD, AESDCHAR_IOCSEEKTO, ioctlData);
+                    close(charDevFD);
+                    break;
+                    #endif
+                }
+
+            } else {
+                printf("Failed string check\n");
+            }
+        } else {
+            printf("failed buffer size check\n");
+        }
+        
 
         int logfd = open(LOG_PATH, LOG_OPTIONS, 0666);
         if(logfd < 0){
@@ -420,6 +451,7 @@ void* repsondingThread(void* arg)
         pthread_mutex_lock(&logMutex);
         sendFullLog(clientFD); // Protect the log read
         pthread_mutex_unlock(&logMutex);
+        break;
     }
 
     shutdown(clientFD, SHUT_RDWR);
