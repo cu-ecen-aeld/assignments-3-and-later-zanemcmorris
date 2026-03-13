@@ -316,8 +316,9 @@ long aesd_unlockedioctl(struct file* filp, unsigned int cmd, unsigned long arg)
     switch(cmd){
 
         case AESDCHAR_IOCSEEKTO:
-            void* argv = &arg;
-            struct aesd_seekto* seekDataPtr = (struct aesd_seekto*) argv; // Recast arg as seekdata
+            // void* argv = &arg;
+            struct aesd_seekto* seekDataPtr = (struct aesd_seekto*) &arg; // Recast arg as seekdata
+            struct aesd_seekto seekData = *seekDataPtr;
             PDEBUG("Parse seekData as write_cmd:%d and offset:%d", seekData.write_cmd, seekData.write_cmd_offset);
 
             mutex_lock(&dev->deviceMutex);
