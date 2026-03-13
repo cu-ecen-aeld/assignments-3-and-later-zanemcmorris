@@ -291,15 +291,12 @@ void aesd_cleanup_module(void)
      */
 
     for(int i = 0; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++){
-        if(aesd_device.circBufferPtr->entry[i] != NULL){
-            if(aesd_device.circBufferPtr->entry[i].buffptr != NULL)
-            {
-                kfree(aesd_device.circBufferPtr->entry[i].buffptr);
-                aesd_device.circBufferPtr->entry[i].buffptr = NULL;
-                aesd_device.circBufferPtr->entry[i] = NULL;
-            }
-                
+        if(aesd_device.circBufferPtr->entry[i].buffptr != NULL)
+        {
+            kfree(aesd_device.circBufferPtr->entry[i].buffptr);
+            aesd_device.circBufferPtr->entry[i].buffptr = NULL;
         }
+                
     }
     kfree(aesd_device.circBufferPtr);
     // I need to free circcuff entries here too. I should have a memory leak right now
