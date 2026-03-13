@@ -219,14 +219,69 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
     mutex_unlock(&aesd_device.deviceMutex);
 
+    *f_pos += retval;
     return retval;
 }
+
+loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
+
+    struct aesd_dev *dev;
+    dev = filp->private_data;
+
+    if (whence != SEEK_SET || whence != SEEK_CUR || whence != SEEK_END){
+        return -EINVAL;
+    }
+
+    loff_t proposedOffset = 0;
+
+    switch (whence) {
+    case SEEK_SET:
+        /* offset is absolute */
+        proposedOffset = offset;
+        break;
+    case SEEK_CUR:
+        /* offset is relative to current file position */
+        proposedOffset = offset + filp->f_pos;
+        break;
+    case SEEK_END:
+        /* offset is relative to end of file/device data */
+        // proposedOffset = size_of_buffer + offset (offset could be < 0)
+        // We need to find bytes within our circ buffer before we can figure out the return value.
+        int numBytes = 0;
+        mutex_lock(&dev->deviceMutex);
+        for(int i = 0; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++){
+            // Loop through all the entries
+            if(dev->circBufferPtr->entry[i].buffptr != NULL){
+                // This feels a little dubious because size MIGHT NOT be assigned correctly\
+                to the buffer length in all cases. It should be good, but might be a bug
+                numBytes += dev->circBufferPtr->entry[i].size;
+            }
+        }
+        mutex_unlock(&dev->deviceMutex);
+
+        proposedOffset = offset + numBytes;
+
+        break;
+    default:
+        return -EINVAL;
+    }
+
+    // set filp->f_pos to new postion
+    // return that value as well.
+    filp->f_pos = proposedOffset;
+    return proposedOffset;
+
+}
+
+
 struct file_operations aesd_fops = {
     .owner = THIS_MODULE,
     .read = aesd_read,
     .write = aesd_write,
     .open = aesd_open,
     .release = aesd_release,
+    .llseek = aesd_llseek,
+
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)
