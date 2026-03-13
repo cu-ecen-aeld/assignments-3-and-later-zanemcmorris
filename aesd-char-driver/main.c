@@ -56,7 +56,8 @@ int aesd_release(struct inode *inode, struct file *filp)
     struct aesd_dev *dev;
     dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
 
-   
+    // Should probably decrement numUsers here...   
+    // And maybe set flip to null
     
     return 0;
 }
@@ -122,6 +123,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     mutex_lock(&aesd_device.deviceMutex);
     if (aesd_device.onGoingWrite == 0)
     {
+        // Setup device for new write.
         aesd_device.tempBuffer = kmalloc(TEMP_BUFFER_STARTING_SIZE, GFP_KERNEL);
         if (aesd_device.tempBuffer == NULL)
         {
@@ -133,7 +135,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         aesd_device.tempBufferIndex = 0;
         aesd_device.onGoingWrite = 1; // Until we see a newline we're in an ongoing write.
     }
-
+    // Logic for checking if a resize is needed for tempbuffer
     size_t neededBufferSize = aesd_device.tempBufferIndex + count;
     size_t newBufferSize = aesd_device.tempBufferSize;
     int resizeNeeded = 0;
@@ -142,7 +144,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         newBufferSize *= 2;
         resizeNeeded = 1;
     }
-
+    // And if resizing is needed, do so.
     if (resizeNeeded == 1)
     {
         char *expandedTempBuffer = krealloc(aesd_device.tempBuffer, newBufferSize, GFP_KERNEL);
@@ -151,7 +153,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             // realloc failed -- no more heap left. die I guess...
             PDEBUG("Could not realloc in write w/ proposed size %zu", newBufferSize);
             kfree(aesd_device.tempBuffer);
-            aesd_device.onGoingWrite = 0;
+            aesd_device.onGoingWrite = 0; // Should refactor resetting of the state to a function
             aesd_device.tempBufferIndex = 0;
             aesd_device.tempBuffer = NULL;
             mutex_unlock(&aesd_device.deviceMutex);
@@ -163,7 +165,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             aesd_device.tempBufferSize = newBufferSize;
         }
     }
-
+    // Now we have an appropriately sized buffer, so copy the data from the user
     int rc = copy_from_user(aesd_device.tempBuffer + aesd_device.tempBufferIndex, buf, count);
     if (rc != 0)
     {
@@ -176,9 +178,10 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         mutex_unlock(&aesd_device.deviceMutex);
         return -EFAULT;
     }
-    retval = count;
 
+    retval = count;
     aesd_device.tempBufferIndex += count;
+    // Check for a complete message or not, i.e. does this message end with \n
     if (aesd_device.tempBufferIndex > 0 &&
         aesd_device.tempBuffer[aesd_device.tempBufferIndex - 1] == '\n')
     {
@@ -194,16 +197,18 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             mutex_unlock(&aesd_device.deviceMutex);
             return -ENOMEM;
         }
-        memset(newCircEntry.buffptr, 0, newCircEntry.size);
 
+        memset(newCircEntry.buffptr, 0, newCircEntry.size);
         memcpy(newCircEntry.buffptr, aesd_device.tempBuffer, newCircEntry.size);
         const char *oldEntryBufPtr = aesd_circular_buffer_add_entry(aesd_device.circBufferPtr, &newCircEntry);
+
         if (oldEntryBufPtr != NULL)
         {
             // There was an old entry that was removed as a result of adding the new entry.
             PDEBUG("Freeing old entry @ %p w/ string %s", oldEntryBufPtr, oldEntryBufPtr);
             kfree(oldEntryBufPtr);
         }
+
         aesd_device.onGoingWrite = 0; // Write just finished. Cleanup state and return
         PDEBUG("Write complete! Wrote %s", newCircEntry.buffptr);
         kfree(aesd_device.tempBuffer);
@@ -285,7 +290,19 @@ void aesd_cleanup_module(void)
      * TODO: cleanup AESD specific poritions here as necessary
      */
 
+    for(int i = 0; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++){
+        if(aesd_device.circBufferPtr->entry[i] != NULL){
+            if(aesd_device.circBufferPtr->entry[i].buffptr != NULL)
+            {
+                kfree(aesd_device.circBufferPtr->entry[i].buffptr);
+                aesd_device.circBufferPtr->entry[i].buffptr = NULL;
+                aesd_device.circBufferPtr->entry[i] = NULL;
+            }
+                
+        }
+    }
     kfree(aesd_device.circBufferPtr);
+    // I need to free circcuff entries here too. I should have a memory leak right now
     unregister_chrdev_region(devno, 1);
 }
 
