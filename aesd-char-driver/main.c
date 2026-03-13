@@ -246,11 +246,15 @@ loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
 
         Suppose I had a circ buffer with a max of 3 elements that I wrote to 4 times.
 
-        write4
+        write4          (BAD)
         write2 <---in_offs (the next element to write to)
         write3 <---out_offs
 
 
+        write1 (gone)
+        write2 out_offs
+        write3
+        write4 in_offs
     */
     loff_t startingOffset = 0;
 
@@ -303,31 +307,32 @@ loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
 
 long aesd_unlockedioctl(struct file* filp, unsigned int cmd, unsigned long arg)
 {
-    // PDEBUG("unlocked_ioctl with cmd %d and arg %d", cmd, arg);
+    PDEBUG("unlocked_ioctl with cmd %d and arg %d", cmd, arg);
 
-    // struct aesd_dev *dev;
-    // dev = filp->private_data;
+    struct aesd_dev *dev;
+    dev = filp->private_data;
 
     
-    // switch(cmd){
+    switch(cmd){
 
-    //     case AESDCHAR_IOCSEEKTO:
-    //         struct aesd_seekto seekData = (struct aesd_seekto) arg; // Recast arg as seekdata
-    //         PDEBUG("Parse seekData as write_cmd:%d and offset:%d", seekData.write_cmd, seekData.write_cmd_offset);
+        case AESDCHAR_IOCSEEKTO:
+            void* argv = &arg;
+            struct aesd_seekto* seekDataPtr = (struct aesd_seekto*) argv; // Recast arg as seekdata
+            PDEBUG("Parse seekData as write_cmd:%d and offset:%d", seekData.write_cmd, seekData.write_cmd_offset);
 
-    //         mutex_lock(&dev->deviceMutex);
+            mutex_lock(&dev->deviceMutex);
 
-    //         int circBufferEntryIndex = dev->circBufferPtr->out_offs;
-    //         circBufferEntryIndex = (circBufferEntryIndex + seekData.write_cmd)\
-    //          % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; // 
+            int circBufferEntryIndex = dev->circBufferPtr->out_offs;
+            circBufferEntryIndex = (circBufferEntryIndex + seekData.write_cmd)\
+             % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; // 
             
-    //         mutex_unlock(&dev->deviceMutex);
+            mutex_unlock(&dev->deviceMutex);
 
 
-    //         break;
-    //     default:
-    //         return -EINVAL;
-    // }
+            break;
+        default:
+            return -EINVAL;
+    }
 
     return 0;
 
