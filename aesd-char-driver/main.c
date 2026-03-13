@@ -252,7 +252,7 @@ loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
 
 
     */
-    // loff_t startingOffset = 0;
+    loff_t startingOffset = 0;
 
     // mutex_lock(&dev->deviceMutex);
     // for(int i = 0; i < dev->circBufferPtr->out_offs; i++){
