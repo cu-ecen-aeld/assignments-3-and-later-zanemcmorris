@@ -238,14 +238,29 @@ loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
     loff_t proposedOffset = 0;
     // count sizes until out_offs entry
     // then add from there
-    loff_t startingOffset = 0;
+    // Note to Zane
+    /*
+        I think I am confused about what the file offset means for us
+        It should be a byte offset from the out_offs entry in the circ buffer.
+        So an fpos of 0 would correspond to the first byte in the out_offs entry. 
 
-    mutex_lock(&dev->deviceMutex);
-    for(int i = 0; i < dev->circBufferPtr->out_offs; i++){
-        startingOffset += dev->circBufferPtr->entries[i].size;
-    }
-    mutex_unlock(&dev->deviceMutex);
-    PDEBUG("Starting offset: %d", startingOffset);
+        Suppose I had a circ buffer with a max of 3 elements that I wrote to 4 times.
+
+        write4
+        write2 <---in_offs (the next element to write to)
+        write3 <---out_offs
+
+
+    */
+    // loff_t startingOffset = 0;
+
+    // mutex_lock(&dev->deviceMutex);
+    // for(int i = 0; i < dev->circBufferPtr->out_offs; i++){
+    //     startingOffset += dev->circBufferPtr->entries[i].size;
+    //     startingOffset += dev->
+    // }
+    // mutex_unlock(&dev->deviceMutex);
+    // PDEBUG("Starting offset: %d", startingOffset);
 
     switch (whence) {
     case SEEK_SET:
