@@ -18,6 +18,7 @@
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
 #include "aesdchar.h"
+#include "aesd_ioctl.h"
 int aesd_major = 0; // use dynamic major
 int aesd_minor = 0;
 
@@ -235,15 +236,25 @@ loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
     }
 
     loff_t proposedOffset = 0;
+    // count sizes until out_offs entry
+    // then add from there
+    loff_t startingOffset = 0;
+
+    mutex_lock(&dev->deviceMutex);
+    for(int i = 0; i < dev->circBufferPtr->out_offs; i++){
+        startingOffset += dev->circBufferPtr->entries[i].size;
+    }
+    mutex_unlock(&dev->deviceMutex);
+    PDEBUG("Starting offset: %d", startingOffset);
 
     switch (whence) {
     case SEEK_SET:
         /* offset is absolute */
-        proposedOffset = offset;
+        proposedOffset = startingOffset + offset;
         break;
     case SEEK_CUR:
         /* offset is relative to current file position */
-        proposedOffset = offset + filp->f_pos;
+        proposedOffset = startingOffset + offset + filp->f_pos;
         break;
     case SEEK_END:
         /* offset is relative to end of file/device data */
@@ -261,7 +272,7 @@ loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
         }
         mutex_unlock(&dev->deviceMutex);
 
-        proposedOffset = offset + numBytes;
+        proposedOffset = startingOffset + offset + numBytes;
 
         break;
     default:
@@ -275,6 +286,38 @@ loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
 
 }
 
+long aesd_unlockedioctl(struct file* filp, unsigned int cmd, unsigned long arg)
+{
+    PDEBUG("unlocked_ioctl with cmd %d and arg %d", cmd, arg);
+
+    struct aesd_dev *dev;
+    dev = filp->private_data;
+
+    
+    switch(cmd){
+
+        case AESDCHAR_IOCSEEKTO:
+            struct aesd_seekto seekData = (struct aesd_seekto) arg; // Recast arg as seekdata
+            PDEBUG("Parse seekData as write_cmd:%d and offset:%d", seekData.write_cmd, seekData.write_cmd_offset);
+
+            mutex_lock(&dev->deviceMutex);
+
+            int circBufferEntryIndex = dev->circBufferPtr->out_offs;
+            circBufferEntryIndex = (circBufferEntryIndex + seekData.write_cmd)\
+             % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; // 
+            
+            mutex_unlock(&dev->deviceMutex);
+
+
+            break;
+        default:
+            return -EINVAL;
+    }
+
+    return;
+
+}
+
 
 struct file_operations aesd_fops = {
     .owner = THIS_MODULE,
@@ -283,6 +326,7 @@ struct file_operations aesd_fops = {
     .open = aesd_open,
     .release = aesd_release,
     .llseek = aesd_llseek,
+    .unlocked_ioctl = 
 
 };
 
