@@ -225,6 +225,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
 loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
 
+    PDEBUG("llseek with offset %d and whence %d", offset, whence);
+
     struct aesd_dev *dev;
     dev = filp->private_data;
 
