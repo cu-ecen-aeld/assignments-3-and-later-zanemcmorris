@@ -329,7 +329,7 @@ long aesd_unlockedioctl(struct file* filp, unsigned int cmd, unsigned long arg)
             return -EINVAL;
     }
 
-    return;
+    return 0;
 
 }
 
@@ -341,7 +341,7 @@ struct file_operations aesd_fops = {
     .open = aesd_open,
     .release = aesd_release,
     .llseek = aesd_llseek,
-    .unlocked_ioctl = 
+    .unlocked_ioctl = aesd_unlockedioctl,
 
 };
 
