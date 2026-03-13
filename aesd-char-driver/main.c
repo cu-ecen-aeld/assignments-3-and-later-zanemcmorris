@@ -189,6 +189,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         struct aesd_buffer_entry newCircEntry = {0};
         newCircEntry.buffptr = kmalloc(aesd_device.tempBufferIndex, GFP_KERNEL);
         newCircEntry.size = aesd_device.tempBufferIndex;
+        PDEBUG("Entry size: %d", newCircEntry.size);
         if (newCircEntry.buffptr == NULL)
         {
             PDEBUG("Could not alloc new buffentry in write.");
