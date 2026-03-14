@@ -321,13 +321,36 @@ long aesd_unlockedioctl(struct file* filp, unsigned int cmd, unsigned long arg)
             struct aesd_seekto seekData = *seekDataPtr;
             PDEBUG("Parse seekData as write_cmd:%d and offset:%d", seekData.write_cmd, seekData.write_cmd_offset);
 
+            if(seekData.write_cmd >= AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED){
+                return -EINVAL; // If we want to search for an entry index that is not supported, then error out
+            }
+
             mutex_lock(&dev->deviceMutex);
 
-            int circBufferEntryIndex = dev->circBufferPtr->out_offs;
-            circBufferEntryIndex = (circBufferEntryIndex + seekData.write_cmd)\
-             % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; // 
+            // Count bytes up until entry of interest, then add the cmd_offset, and return
+            // Challenge is the circular piece.
+            // We start at out_offs, count up until we find the nth 
+            int entriesProcessed = 0;
+            int entryIndex = dev->circBufferPtr->out_offs;
+            int fileoffset = 0;
+            while(entriesProcessed < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED){
+                if(entriesProcessed == seekData.write_cmd){
+                    break;
+                }
+                fileoffset += dev->circBufferPtr->entry[entryIndex].size;
+                entriesProcessed += 1;
+                entryIndex += 1;
+                entryIndex %= AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+            }
+
+            // precedingBytes should now hold the number of bytes before the cmd of interest
+            fileoffset += seekData.write_cmd_offset;
+            // Now return fileoffset
+            filp->f_pos = fileoffset;
             
             mutex_unlock(&dev->deviceMutex);
+
+            return fileoffset;
 
 
             break;

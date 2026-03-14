@@ -331,6 +331,37 @@ int sendFullLog(int newfd)
 }
 
 /**
+ * @brief Sends the full log of what was received on the socket to newfd from logfd
+ * @details NOT thread-safe!! Use mutex around me for logdata!
+ *          Does not close logfd itself!
+ * @return Returns 0 on success, -1 on failure.
+ */
+int sendFullLogWExistingFD(int newfd, int logfd)
+{
+    char buf[64];
+    while (1) {
+        ssize_t n = read(logfd, buf, sizeof(buf));
+        if (n == 0) break;
+        if (n < 0) {
+            perror("read log");
+            return -1;
+        }
+
+        ssize_t sent = 0;
+        while (sent < n) {
+            ssize_t m = send(newfd, buf + sent, (size_t)(n - sent), 0);
+            if (m < 0) {
+                perror("send");
+                return -1;
+            }
+            sent += m;
+        }
+    }
+
+    return 0;
+}
+
+/**
  * @brief Pthread recieving thread for multi-threaded server. Spawned on each new connection
  * @arg Pointer to linkedlist node containing thread-specific information  
  * @return None
@@ -393,8 +424,10 @@ void* repsondingThread(void* arg)
         }
     }
 
+    bool wasIoctlCommand = false;
+
     // Trap for failed to read to hit the cleanup and return step at the end of function
-    while(!failedToRead){
+    if(!failedToRead){
         // If we read completely, write message to the log, free the buffer and echo back log
         // buffer[totalBytesRecvd] = 0; // Set null-terminator
         // printf("new buffer: %s", buffer);
@@ -411,14 +444,16 @@ void* repsondingThread(void* arg)
                 long cmdIndex = 0, cmdOffset = 0;
                 if(sscanf(buffer, "AESDCHAR_IOCSEEKTO:%ld,%ld", &cmdIndex, &cmdOffset) == 2){
                     // printf("x=%ld y=%ld\n", cmdIndex, cmdOffset);
-                    ioctlData = (cmdIndex << 32) | (cmdOffset);
+                    ioctlData = (cmdOffset << 32) | (cmdIndex);
                     // printf("iocl: %ld\n", ioctlData);
 
                     #if USE_AESD_CHAR_DEVICE
                     int charDevFD = open(LOG_PATH, O_RDWR);
                     ioctl(charDevFD, AESDCHAR_IOCSEEKTO, ioctlData);
+                    sendFullLogWExistingFD(clientFD, charDevFD);
                     close(charDevFD);
-                    break;
+                    syslog(LOG_DEBUG, "Sent ioctl cmd to aesdchar device.");
+                    wasIoctlCommand = true;
                     #endif
                 }
 
@@ -429,29 +464,29 @@ void* repsondingThread(void* arg)
             printf("failed buffer size check\n");
         }
         
+        if(!wasIoctlCommand){
+            int logfd = open(LOG_PATH, LOG_OPTIONS, 0666);
+            if(logfd < 0){
+                perror("Could not open logfd");
+                return NULL;
+            }
 
-        int logfd = open(LOG_PATH, LOG_OPTIONS, 0666);
-        if(logfd < 0){
-            perror("Could not open logfd");
-            return NULL;
+            pthread_mutex_lock(&logMutex);
+            write(logfd, buffer, totalBytesRecvd); // Protext the log write
+            pthread_mutex_unlock(&logMutex);
+
+            close(logfd);
+
+            if(buffer != NULL)
+            {
+                free(buffer);
+                buffer = NULL;
+            } 
+
+            pthread_mutex_lock(&logMutex);
+            sendFullLog(clientFD); // Protect the log read
+            pthread_mutex_unlock(&logMutex);
         }
-
-        pthread_mutex_lock(&logMutex);
-        write(logfd, buffer, totalBytesRecvd); // Protext the log write
-        pthread_mutex_unlock(&logMutex);
-
-        close(logfd);
-
-        if(buffer != NULL)
-        {
-            free(buffer);
-            buffer = NULL;
-        }   
-
-        pthread_mutex_lock(&logMutex);
-        sendFullLog(clientFD); // Protect the log read
-        pthread_mutex_unlock(&logMutex);
-        break;
     }
 
     shutdown(clientFD, SHUT_RDWR);
