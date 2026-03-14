@@ -17,12 +17,24 @@
 #include <sys/time.h>
 #include <stdatomic.h>
 #include <time.h>
+#include "../aesd-char-driver/aesd_ioctl.h"
+
+#define USE_AESD_CHAR_DEVICE (1)
+
+#if (USE_AESD_CHAR_DEVICE == 1)
+#define LOG_PATH ("/dev/aesdchar")
+#define LOG_OPTIONS (O_WRONLY | O_RDONLY)
+#else
+#define LOG_PATH ("/var/tmp/aesdsocketdata")
+#define LOG_OPTIONS (O_APPEND | O_CREAT | O_RDWR)
+#endif
+
 
 #define MAX_SOCK_CONNECTIONS (100)
-#define LOG_PATH ("/var/tmp/aesdsocketdata")
 #define SOCKET_PORT ("9000")
 #define RECV_BUFFER_LENGTH_BYTES (32)
 #define ITIMER_PERIOD_SEC (10)
+
 
 typedef struct sockaddr sockaddr_t;
 typedef struct addrinfo addrinfo_t;
@@ -30,7 +42,7 @@ typedef struct addrinfo addrinfo_t;
 // Globally available addrinfo to clean after program terminates
 addrinfo_t *addrinfo = NULL;
 int sockfd = -1;
-int logfd = -1;
+// int logfd = -1;
 // int clientfd = -1;
 volatile int endProgram = 0;
 bool runAsDaemon = false;
@@ -93,9 +105,17 @@ static void timerCallback(union sigval sv)
     str[charsWritten] = '\n';
     charsWritten += 1; // Make room for newline
 
+    int logfd = open(LOG_PATH, LOG_OPTIONS, 0666);
+    if(logfd < 0){
+        perror("Could not open logfd");
+        return;
+    }
+
     pthread_mutex_lock(&logMutex);
     write(logfd, str, charsWritten);
     pthread_mutex_unlock(&logMutex);
+
+    close(logfd);
 
     return;
 }
@@ -146,11 +166,11 @@ int cleanupProgram()
         sockfd = -1;
     }
 
-    if(logfd != -1){
-        close(logfd);
-        logfd = -1;
-    }
-
+    // if(logfd != -1){
+    //     close(logfd);
+    //     logfd = -1;
+    // }
+#if (USE_AESD_CHAR_DEVICE == 0)
     int rc;
     rc = access(LOG_PATH, F_OK);
     if(rc == 0){
@@ -159,8 +179,9 @@ int cleanupProgram()
             perror("remove failed");
         }
     }
-
+#endif
     printf("Cleaned!\n");
+    return 0;
 }
 
 /**
@@ -283,50 +304,60 @@ int sendFullLog(int newfd)
         return -1;
     }
 
-    struct stat st;
-    int rc = stat(LOG_PATH, &st);
-    if(rc == -1){
-        perror("Stat failed");
-        return -1;
-    }
-
-    int fsize = st.st_size;
-    // printf("fsize: %d\n", fsize);
-
-    char *buf = malloc(sizeof(char) * fsize);
-    if(buf == NULL)
-    {
-        // Malloc failed
-        syslog(LOG_DEBUG, "Malloc failed in sendFullLog");
-        return -1;
-    }
-
+    char buf[64];
     while (1) {
-        ssize_t n = read(fd, buf, fsize);
+        ssize_t n = read(fd, buf, sizeof(buf));
         if (n == 0) break;
         if (n < 0) {
             perror("read log");
-            close(newfd);
-            free(buf);
+            close(fd);
             return -1;
         }
 
-        // send() may write fewer bytes than requested, so loop until done
         ssize_t sent = 0;
         while (sent < n) {
             ssize_t m = send(newfd, buf + sent, (size_t)(n - sent), 0);
             if (m < 0) {
                 perror("send");
-                close(newfd);
-                free(buf);
+                close(fd);
                 return -1;
             }
             sent += m;
         }
     }
 
-    free(buf);
     close(fd);
+    return 0;
+}
+
+/**
+ * @brief Sends the full log of what was received on the socket to newfd from logfd
+ * @details NOT thread-safe!! Use mutex around me for logdata!
+ *          Does not close logfd itself!
+ * @return Returns 0 on success, -1 on failure.
+ */
+int sendFullLogWExistingFD(int newfd, int logfd)
+{
+    char buf[64];
+    while (1) {
+        ssize_t n = read(logfd, buf, sizeof(buf));
+        if (n == 0) break;
+        if (n < 0) {
+            perror("read log");
+            return -1;
+        }
+
+        ssize_t sent = 0;
+        while (sent < n) {
+            ssize_t m = send(newfd, buf + sent, (size_t)(n - sent), 0);
+            if (m < 0) {
+                perror("send");
+                return -1;
+            }
+            sent += m;
+        }
+    }
+
     return 0;
 }
 
@@ -344,7 +375,7 @@ void* repsondingThread(void* arg)
 
     // Set up to recv from client
     size_t bufferCapacity = RECV_BUFFER_LENGTH_BYTES;
-    uint8_t *buffer = (uint8_t*) malloc(bufferCapacity);
+    char *buffer = (char*) malloc(bufferCapacity);
     memset(buffer, 0, bufferCapacity);
     int totalBytesRecvd = 0; // Reset num bytes received for this message
     bool failedToRead = false;
@@ -355,7 +386,7 @@ void* repsondingThread(void* arg)
         // If received bytes on last ittr was at buffer capacity, then double capacity and keep going
         if(totalBytesRecvd == bufferCapacity){
             bufferCapacity *= 2;
-            uint8_t *temp = realloc(buffer, bufferCapacity);
+            char *temp = realloc(buffer, bufferCapacity);
             if(temp == NULL){
                 free(buffer);
                 // toss this message and go next if malloc failed 
@@ -393,6 +424,8 @@ void* repsondingThread(void* arg)
         }
     }
 
+    bool wasIoctlCommand = false;
+
     // Trap for failed to read to hit the cleanup and return step at the end of function
     if(!failedToRead){
         // If we read completely, write message to the log, free the buffer and echo back log
@@ -400,19 +433,60 @@ void* repsondingThread(void* arg)
         // printf("new buffer: %s", buffer);
         syslog(LOG_DEBUG, "Recvd string: %s", buffer);
 
-        pthread_mutex_lock(&logMutex);
-        write(logfd, buffer, totalBytesRecvd); // Protext the log write
-        pthread_mutex_unlock(&logMutex);
+        // Check for ioctl command
+        // If the input string was shorter than the command length then it certainly cannot be a ioctl
+        // printf("buffer size: %ld", bufferCapacity);
+        if(bufferCapacity > sizeof("AESDCHAR_IOCSEEKTO:")){
+            if(strncmp(buffer, "AESDCHAR_IOCSEEKTO:", sizeof("AESDCHAR_IOCSEEKTO:") - 1) == 0){
+            // we received a ioctl command!
+            // format:X,Y 
+                long ioctlData = 0;
+                long cmdIndex = 0, cmdOffset = 0;
+                if(sscanf(buffer, "AESDCHAR_IOCSEEKTO:%ld,%ld", &cmdIndex, &cmdOffset) == 2){
+                    // printf("x=%ld y=%ld\n", cmdIndex, cmdOffset);
+                    ioctlData = (cmdOffset << 32) | (cmdIndex);
+                    // printf("iocl: %ld\n", ioctlData);
 
-        if(buffer != NULL)
-        {
-            free(buffer);
-            buffer = NULL;
-        }   
+                    #if USE_AESD_CHAR_DEVICE
+                    int charDevFD = open(LOG_PATH, O_RDWR);
+                    ioctl(charDevFD, AESDCHAR_IOCSEEKTO, ioctlData);
+                    sendFullLogWExistingFD(clientFD, charDevFD);
+                    close(charDevFD);
+                    syslog(LOG_DEBUG, "Sent ioctl cmd to aesdchar device.");
+                    wasIoctlCommand = true;
+                    #endif
+                }
 
-        pthread_mutex_lock(&logMutex);
-        sendFullLog(clientFD); // Protect the log read
-        pthread_mutex_unlock(&logMutex);
+            } else {
+                printf("Failed string check\n");
+            }
+        } else {
+            printf("failed buffer size check\n");
+        }
+        
+        if(!wasIoctlCommand){
+            int logfd = open(LOG_PATH, LOG_OPTIONS, 0666);
+            if(logfd < 0){
+                perror("Could not open logfd");
+                return NULL;
+            }
+
+            pthread_mutex_lock(&logMutex);
+            write(logfd, buffer, totalBytesRecvd); // Protext the log write
+            pthread_mutex_unlock(&logMutex);
+
+            close(logfd);
+
+            if(buffer != NULL)
+            {
+                free(buffer);
+                buffer = NULL;
+            } 
+
+            pthread_mutex_lock(&logMutex);
+            sendFullLog(clientFD); // Protect the log read
+            pthread_mutex_unlock(&logMutex);
+        }
     }
 
     shutdown(clientFD, SHUT_RDWR);
@@ -434,14 +508,11 @@ int listenLoop()
 {
     int rc = 0;
     struct sockaddr_storage clientaddr;
-    int newfd = 0;
-    logfd = open(LOG_PATH, (O_APPEND | O_CREAT | O_RDWR), 0777);
-    if(logfd < 0){
-        perror("Could not open logfd");
-        return -1;
-    }
+    
 
+    #if (USE_AESD_CHAR_DEVICE == 0)
     startIntervalLoggingTimer(); // Start once logFD is open
+    #endif
 
     printf("starting to listen...\n");
     rc = listen(sockfd, MAX_SOCK_CONNECTIONS);
@@ -449,7 +520,7 @@ int listenLoop()
         perror("listen failed");
     }
 
-    int clientAddrSize = sizeof(clientaddr);
+    uint32_t clientAddrSize = sizeof(clientaddr);
     SLIST_INIT(&head); // Create LL for threadss
 
     do
@@ -505,6 +576,8 @@ int listenLoop()
         free(dataptr);
     }
 
+    return 0;
+
 }
 
 /**
@@ -521,6 +594,12 @@ int main(int argc, char ** argv){
         printf("Bad args to aesdsocket\n");
         return -1;
     }
+
+    #if USE_AESD_CHAR_DEVICE
+    printf("Using char device for ased socket!\n");
+    #else
+    printf("Using regular log for aesd socket!\n");
+    #endif
 
     openlog("aesdsocket", LOG_PERROR, LOG_USER);
     struct sigaction sa = {0};
