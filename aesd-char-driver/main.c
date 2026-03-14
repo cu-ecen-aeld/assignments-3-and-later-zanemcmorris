@@ -58,7 +58,6 @@ int aesd_release(struct inode *inode, struct file *filp)
     dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
 
     // Should probably decrement numUsers here...   
-    // And maybe set flip to null
     
     return 0;
 }
@@ -236,44 +235,15 @@ loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
     }
 
     loff_t proposedOffset = 0;
-    // count sizes until out_offs entry
-    // then add from there
-    // Note to Zane
-    /*
-        I think I am confused about what the file offset means for us
-        It should be a byte offset from the out_offs entry in the circ buffer.
-        So an fpos of 0 would correspond to the first byte in the out_offs entry. 
-
-        Suppose I had a circ buffer with a max of 3 elements that I wrote to 4 times.
-
-        write4          (BAD)
-        write2 <---in_offs (the next element to write to)
-        write3 <---out_offs
-
-
-        write1 (gone)
-        write2 out_offs
-        write3
-        write4 in_offs
-    */
-    loff_t startingOffset = 0;
-
-    // mutex_lock(&dev->deviceMutex);
-    // for(int i = 0; i < dev->circBufferPtr->out_offs; i++){
-    //     startingOffset += dev->circBufferPtr->entries[i].size;
-    //     startingOffset += dev->
-    // }
-    // mutex_unlock(&dev->deviceMutex);
-    // PDEBUG("Starting offset: %d", startingOffset);
 
     switch (whence) {
     case SEEK_SET:
         /* offset is absolute */
-        proposedOffset = startingOffset + offset;
+        proposedOffset = offset;
         break;
     case SEEK_CUR:
         /* offset is relative to current file position */
-        proposedOffset = startingOffset + offset + filp->f_pos;
+        proposedOffset = offset + filp->f_pos;
         break;
     case SEEK_END:
         /* offset is relative to end of file/device data */
@@ -291,7 +261,7 @@ loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
         }
         mutex_unlock(&dev->deviceMutex);
 
-        proposedOffset = startingOffset + offset + numBytes;
+        proposedOffset = offset + numBytes;
 
         break;
     default:
@@ -329,7 +299,7 @@ long aesd_unlockedioctl(struct file* filp, unsigned int cmd, unsigned long arg)
 
             // Count bytes up until entry of interest, then add the cmd_offset, and return
             // Challenge is the circular piece.
-            // We start at out_offs, count up until we find the nth 
+            // We start at out_offs, count up until we find the nth cmd
             int entriesProcessed = 0;
             int entryIndex = dev->circBufferPtr->out_offs;
             int fileoffset = 0;
@@ -343,7 +313,7 @@ long aesd_unlockedioctl(struct file* filp, unsigned int cmd, unsigned long arg)
                 entryIndex %= AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
             }
 
-            // precedingBytes should now hold the number of bytes before the cmd of interest
+            // fileoffset should now hold the number of bytes before the cmd of interest
             fileoffset += seekData.write_cmd_offset;
             // Now return fileoffset
             filp->f_pos = fileoffset;
