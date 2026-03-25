@@ -87,7 +87,7 @@ const char *aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
     * TODO: implement per description
     */
     static int hasBufferBeenFilled = 0;
-    char* retVal = NULL;
+    const char* retVal = NULL;
 
     if(buffer == NULL || add_entry == NULL){
         // printf("Null addresses passed into add_entry. Returning\n");

@@ -18,6 +18,7 @@
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
 #include "aesdchar.h"
+#include "aesd_ioctl.h"
 int aesd_major = 0; // use dynamic major
 int aesd_minor = 0;
 
@@ -56,7 +57,7 @@ int aesd_release(struct inode *inode, struct file *filp)
     struct aesd_dev *dev;
     dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
 
-   
+    // Should probably decrement numUsers here...   
     
     return 0;
 }
@@ -122,6 +123,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     mutex_lock(&aesd_device.deviceMutex);
     if (aesd_device.onGoingWrite == 0)
     {
+        // Setup device for new write.
         aesd_device.tempBuffer = kmalloc(TEMP_BUFFER_STARTING_SIZE, GFP_KERNEL);
         if (aesd_device.tempBuffer == NULL)
         {
@@ -133,7 +135,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         aesd_device.tempBufferIndex = 0;
         aesd_device.onGoingWrite = 1; // Until we see a newline we're in an ongoing write.
     }
-
+    // Logic for checking if a resize is needed for tempbuffer
     size_t neededBufferSize = aesd_device.tempBufferIndex + count;
     size_t newBufferSize = aesd_device.tempBufferSize;
     int resizeNeeded = 0;
@@ -142,7 +144,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         newBufferSize *= 2;
         resizeNeeded = 1;
     }
-
+    // And if resizing is needed, do so.
     if (resizeNeeded == 1)
     {
         char *expandedTempBuffer = krealloc(aesd_device.tempBuffer, newBufferSize, GFP_KERNEL);
@@ -151,7 +153,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             // realloc failed -- no more heap left. die I guess...
             PDEBUG("Could not realloc in write w/ proposed size %zu", newBufferSize);
             kfree(aesd_device.tempBuffer);
-            aesd_device.onGoingWrite = 0;
+            aesd_device.onGoingWrite = 0; // Should refactor resetting of the state to a function
             aesd_device.tempBufferIndex = 0;
             aesd_device.tempBuffer = NULL;
             mutex_unlock(&aesd_device.deviceMutex);
@@ -163,7 +165,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             aesd_device.tempBufferSize = newBufferSize;
         }
     }
-
+    // Now we have an appropriately sized buffer, so copy the data from the user
     int rc = copy_from_user(aesd_device.tempBuffer + aesd_device.tempBufferIndex, buf, count);
     if (rc != 0)
     {
@@ -176,9 +178,10 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         mutex_unlock(&aesd_device.deviceMutex);
         return -EFAULT;
     }
-    retval = count;
 
+    retval = count;
     aesd_device.tempBufferIndex += count;
+    // Check for a complete message or not, i.e. does this message end with \n
     if (aesd_device.tempBufferIndex > 0 &&
         aesd_device.tempBuffer[aesd_device.tempBufferIndex - 1] == '\n')
     {
@@ -194,16 +197,18 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             mutex_unlock(&aesd_device.deviceMutex);
             return -ENOMEM;
         }
-        memset(newCircEntry.buffptr, 0, newCircEntry.size);
 
+        memset(newCircEntry.buffptr, 0, newCircEntry.size);
         memcpy(newCircEntry.buffptr, aesd_device.tempBuffer, newCircEntry.size);
         const char *oldEntryBufPtr = aesd_circular_buffer_add_entry(aesd_device.circBufferPtr, &newCircEntry);
+
         if (oldEntryBufPtr != NULL)
         {
             // There was an old entry that was removed as a result of adding the new entry.
             PDEBUG("Freeing old entry @ %p w/ string %s", oldEntryBufPtr, oldEntryBufPtr);
             kfree(oldEntryBufPtr);
         }
+
         aesd_device.onGoingWrite = 0; // Write just finished. Cleanup state and return
         PDEBUG("Write complete! Wrote %s", newCircEntry.buffptr);
         kfree(aesd_device.tempBuffer);
@@ -214,14 +219,129 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
     mutex_unlock(&aesd_device.deviceMutex);
 
+    *f_pos += retval;
     return retval;
 }
+
+loff_t aesd_llseek(struct file* filp, loff_t offset, int whence){
+
+    PDEBUG("llseek with offset %d and whence %d", offset, whence);
+
+    struct aesd_dev *dev;
+    dev = filp->private_data;
+
+    if (whence != SEEK_SET || whence != SEEK_CUR || whence != SEEK_END){
+        return -EINVAL;
+    }
+
+    loff_t proposedOffset = 0;
+
+    switch (whence) {
+    case SEEK_SET:
+        /* offset is absolute */
+        proposedOffset = offset;
+        break;
+    case SEEK_CUR:
+        /* offset is relative to current file position */
+        proposedOffset = offset + filp->f_pos;
+        break;
+    case SEEK_END:
+        /* offset is relative to end of file/device data */
+        // proposedOffset = size_of_buffer + offset (offset could be < 0)
+        // We need to find bytes within our circ buffer before we can figure out the return value.
+        int numBytes = 0;
+        mutex_lock(&dev->deviceMutex);
+        for(int i = 0; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++){
+            // Loop through all the entries
+            if(dev->circBufferPtr->entry[i].buffptr != NULL){
+                // This feels a little dubious because size MIGHT NOT be assigned correctly\
+                to the buffer length in all cases. It should be good, but might be a bug
+                numBytes += dev->circBufferPtr->entry[i].size;
+            }
+        }
+        mutex_unlock(&dev->deviceMutex);
+
+        proposedOffset = offset + numBytes;
+
+        break;
+    default:
+        return -EINVAL;
+    }
+
+    // set filp->f_pos to new postion
+    // return that value as well.
+    filp->f_pos = proposedOffset;
+    return proposedOffset;
+
+}
+
+long aesd_unlockedioctl(struct file* filp, unsigned int cmd, unsigned long arg)
+{
+    PDEBUG("unlocked_ioctl with cmd %d and arg %d", cmd, arg);
+
+    struct aesd_dev *dev;
+    dev = filp->private_data;
+
+    
+    switch(cmd){
+
+        case AESDCHAR_IOCSEEKTO:
+            // void* argv = &arg;
+            struct aesd_seekto* seekDataPtr = (struct aesd_seekto*) &arg; // Recast arg as seekdata
+            struct aesd_seekto seekData = *seekDataPtr;
+            PDEBUG("Parse seekData as write_cmd:%d and offset:%d", seekData.write_cmd, seekData.write_cmd_offset);
+
+            if(seekData.write_cmd >= AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED){
+                return -EINVAL; // If we want to search for an entry index that is not supported, then error out
+            }
+
+            mutex_lock(&dev->deviceMutex);
+
+            // Count bytes up until entry of interest, then add the cmd_offset, and return
+            // Challenge is the circular piece.
+            // We start at out_offs, count up until we find the nth cmd
+            int entriesProcessed = 0;
+            int entryIndex = dev->circBufferPtr->out_offs;
+            int fileoffset = 0;
+            while(entriesProcessed < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED){
+                if(entriesProcessed == seekData.write_cmd){
+                    break;
+                }
+                fileoffset += dev->circBufferPtr->entry[entryIndex].size;
+                entriesProcessed += 1;
+                entryIndex += 1;
+                entryIndex %= AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+            }
+
+            // fileoffset should now hold the number of bytes before the cmd of interest
+            fileoffset += seekData.write_cmd_offset;
+            // Now return fileoffset
+            filp->f_pos = fileoffset;
+            
+            mutex_unlock(&dev->deviceMutex);
+
+            return fileoffset;
+
+
+            break;
+        default:
+            return -EINVAL;
+    }
+
+    return 0;
+
+}
+
+
 struct file_operations aesd_fops = {
     .owner = THIS_MODULE,
     .read = aesd_read,
     .write = aesd_write,
     .open = aesd_open,
     .release = aesd_release,
+    .llseek = aesd_llseek,
+    .unlocked_ioctl = aesd_unlockedioctl,
+
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)
@@ -285,7 +405,16 @@ void aesd_cleanup_module(void)
      * TODO: cleanup AESD specific poritions here as necessary
      */
 
+    for(int i = 0; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++){
+        if(aesd_device.circBufferPtr->entry[i].buffptr != NULL)
+        {
+            kfree(aesd_device.circBufferPtr->entry[i].buffptr);
+            aesd_device.circBufferPtr->entry[i].buffptr = NULL;
+        }
+                
+    }
     kfree(aesd_device.circBufferPtr);
+    // I need to free circcuff entries here too. I should have a memory leak right now
     unregister_chrdev_region(devno, 1);
 }
 
